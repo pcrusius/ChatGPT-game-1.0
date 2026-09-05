@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apex Rush</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="hud" class="hidden">
+        <div class="hud-panel hud-left">
+          <div class="hud-label">SCORE</div>
+          <div id="hud-score" class="hud-value">0</div>
+        </div>
+        <div class="hud-panel hud-center">
+          <div class="hud-label">SPEED</div>
+          <div id="hud-speed" class="hud-value">0<span class="hud-unit">KM/H</span></div>
+        </div>
+        <div class="hud-panel hud-right">
+          <div class="hud-label">COINS</div>
+          <div id="hud-coins" class="hud-value">0</div>
+        </div>
+      </div>
+
+      <div id="start-screen" class="overlay">
+        <div class="overlay-card">
+          <p class="eyebrow">THREE-LANE HIGHWAY</p>
+          <h1>APEX RUSH</h1>
+          <p class="tagline">Drive forever. Dodge traffic. Collect gold.</p>
+          <div class="button-row">
+            <button id="play-btn" class="btn primary">PLAY</button>
+            <button id="garage-btn" class="btn">GARAGE</button>
+          </div>
+          <div class="controls-guide">
+            <div><kbd>←</kbd><kbd>→</kbd><span>Change lanes</span></div>
+            <div><kbd>SPACE</kbd><span>Jump</span></div>
+            <div><kbd>R</kbd><span>Restart after crash</span></div>
+          </div>
+          <p id="start-best" class="meta">HIGH SCORE 0 · BANK 0</p>
+        </div>
+      </div>
+
+      <div id="garage-screen" class="overlay hidden">
+        <div class="overlay-card garage-card">
+          <p class="eyebrow">CUSTOM SHOP</p>
+          <h2>GARAGE</h2>
+          <p id="garage-bank" class="meta">BANK 0 COINS</p>
+          <div id="skin-grid" class="skin-grid"></div>
+          <button id="garage-back-btn" class="btn">BACK</button>
+        </div>
+      </div>
+
+      <div id="gameover-screen" class="overlay hidden">
+        <div class="overlay-card">
+          <p class="eyebrow crash">CRASHED</p>
+          <h2>GAME OVER</h2>
+          <div class="stats">
+            <div>
+              <div class="hud-label">SCORE</div>
+              <div id="over-score" class="hud-value">0</div>
+            </div>
+            <div>
+              <div class="hud-label">COINS</div>
+              <div id="over-coins" class="hud-value">0</div>
+            </div>
+            <div>
+              <div class="hud-label">BEST</div>
+              <div id="over-best" class="hud-value">0</div>
+            </div>
+          </div>
+          <div class="button-row">
+            <button id="retry-btn" class="btn primary">RACE AGAIN</button>
+            <button id="menu-btn" class="btn">MENU</button>
+          </div>
+          <p class="meta">PRESS R TO RESTART</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
