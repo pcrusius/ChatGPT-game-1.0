@@ -92,7 +92,9 @@ export class World {
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     const sky = makeSkyTexture();
     scene.background = sky;
-    scene.fog = new THREE.Fog(FOG_COLOR, 70, 320);
+    // Far plane sits inside the recycle span so scenery and obstacles fade in through the
+    // haze instead of snapping into existence at the edge of the world.
+    scene.fog = new THREE.Fog(FOG_COLOR, 85, 225);
 
     // Metal and clearcoat surfaces need something to reflect or they render nearly black.
     const pmrem = new THREE.PMREMGenerator(renderer);

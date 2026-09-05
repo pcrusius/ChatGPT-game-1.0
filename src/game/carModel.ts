@@ -343,6 +343,7 @@ export function createSportsCar(colors: CarColors, compact = false): THREE.Group
   car.add(blob);
 
   car.userData.wheels = wheels;
+  car.userData.shadow = blob;
   return car;
 }
 

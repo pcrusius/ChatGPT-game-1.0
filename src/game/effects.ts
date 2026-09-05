@@ -10,6 +10,21 @@ interface Particle {
 
 const MAX_PARTICLES = 400;
 
+function makeSparkTexture(): THREE.Texture {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.35, "rgba(255,255,255,0.7)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+
 export class FX {
   readonly group = new THREE.Group();
   private particles: Particle[] = [];
@@ -23,7 +38,8 @@ export class FX {
     this.geometry.setAttribute("color", new THREE.BufferAttribute(this.colors, 3));
 
     const material = new THREE.PointsMaterial({
-      size: 0.26,
+      size: 0.42,
+      map: makeSparkTexture(),
       vertexColors: true,
       transparent: true,
       opacity: 0.95,

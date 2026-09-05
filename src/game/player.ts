@@ -5,6 +5,7 @@ import type { SkinId } from "./config";
 
 export class Player {
   readonly mesh: THREE.Group;
+  private readonly shadow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   lane = 1;
   targetLane = 1;
   x = 0;
@@ -19,8 +20,17 @@ export class Player {
 
   constructor(skin: SkinId) {
     this.mesh = createSportsCar(getSkinColors(skin));
+    this.shadow = this.mesh.userData.shadow;
     this.x = laneX(this.lane);
     this.mesh.position.set(this.x, 0, 0);
+  }
+
+  /** The contact shadow lives under the car, so it has to shrink and fade during a jump. */
+  private updateShadow(): void {
+    const lift = THREE.MathUtils.clamp(this.y / JUMP_HEIGHT, 0, 1);
+    this.shadow.position.y = 0.02 - this.y;
+    this.shadow.scale.setScalar(1 - lift * 0.42);
+    this.shadow.material.opacity = 0.34 * (1 - lift * 0.72);
   }
 
   setSkin(skin: SkinId): void {
@@ -39,6 +49,7 @@ export class Player {
     this.laneT = 1;
     this.mesh.position.set(this.x, 0, 0);
     this.mesh.rotation.set(0, 0, 0);
+    this.updateShadow();
   }
 
   shift(dir: -1 | 1): void {
@@ -91,9 +102,10 @@ export class Player {
 
     const lateral = this.laneT < 1 ? (this.toX - this.fromX) / LANE_WIDTH : 0;
     const lean = lateral * Math.sin(this.laneT * Math.PI) * 0.16;
-    const pitch = this.jumping ? (0.5 - this.jumpT / JUMP_DURATION) * 0.28 : 0;
+    const pitch = this.jumping ? (0.5 - this.jumpT / JUMP_DURATION) * 0.34 : 0;
     this.mesh.position.set(this.x, this.y, 0);
     this.mesh.rotation.set(pitch, 0, -lean);
+    this.updateShadow();
 
     const wheels = this.mesh.userData.wheels as THREE.Group[];
     const spin = (speed * dt) / 0.38;
