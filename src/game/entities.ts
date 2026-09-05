@@ -13,6 +13,8 @@ const EULER = new THREE.Euler();
 const WHITE = new THREE.Color(0xffffff);
 const TINT = new THREE.Color();
 const WHEEL_GREY = new THREE.Color(0x8b929b);
+/** Cars further ahead than this draw tyres without spoked rims. */
+const RIM_LOD_Z = -48;
 /**
  * A set of identical props drawn as instanced meshes, one per material role. The paint role can
  * be tinted per instance, which is how traffic gets a colour palette for free.
@@ -641,8 +643,9 @@ export class EntityField {
         entity.spin += (entity.speed / 0.4) * dt;
         POS.set(x, 0, entity.z);
         QUAT.identity();
+        const detailed = entity.z > RIM_LOD_Z;
         for (const spec of model.wheels) {
-          this.wheels.push(spec, POS, QUAT, entity.spin, 0, WHEEL_GREY, null);
+          this.wheels.push(spec, POS, QUAT, entity.spin, 0, WHEEL_GREY, null, detailed);
         }
       }
     }

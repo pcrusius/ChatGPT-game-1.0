@@ -7,7 +7,7 @@ import {
   ROAD_WIDTH,
   SHOULDER_WIDTH,
 } from "../game/config";
-import { PartBuilder, mergeAll, roundedBox, taperedBox, tubeX } from "../render/geom";
+import { PartBuilder, box, mergeAll, roundedBox, taperedBox, tubeX } from "../render/geom";
 import type { Materials } from "../render/materials";
 import type { QualitySettings } from "../core/quality";
 import type { BlendedTheme } from "./themes";
@@ -159,7 +159,7 @@ export class Road {
     // Raised concrete curb between shoulder and verge; sells the road as built, not painted on.
     const curbParts: THREE.BufferGeometry[] = [];
     for (const side of [-1, 1]) {
-      const curb = roundedBox(0.5, 0.26, ROAD_LENGTH, 0.06, 1);
+      const curb = box(0.5, 0.26, ROAD_LENGTH);
       curb.translate(side * (totalWidth / 2 + 0.16), 0.09, 0);
       curbParts.push(curb);
     }
@@ -173,17 +173,17 @@ export class Road {
     // Guardrail: W-beam plus post, merged into one instanced unit per 6 m bay.
     const railParts = new PartBuilder<"metal" | "post">();
     railParts.add("metal", (() => {
-      const beam = roundedBox(0.09, 0.34, 6.02, 0.035, 1);
+      const beam = box(0.09, 0.34, 6.02);
       beam.translate(0, 0.62, 0);
       return beam;
     })());
     railParts.add("metal", (() => {
-      const lip = roundedBox(0.13, 0.06, 6.02, 0.02, 1);
+      const lip = box(0.13, 0.06, 6.02);
       lip.translate(0, 0.78, 0);
       return lip;
     })());
     railParts.add("post", (() => {
-      const post = roundedBox(0.14, 0.66, 0.14, 0.03, 1);
+      const post = box(0.14, 0.66, 0.14);
       post.translate(0, 0.33, -2.9);
       return post;
     })());
@@ -200,7 +200,7 @@ export class Road {
     this.guardrail.addTo(this.group);
 
     // Post reflectors, every second bay.
-    const reflectorGeo = roundedBox(0.06, 0.13, 0.05, 0.015, 1);
+    const reflectorGeo = box(0.06, 0.13, 0.05);
     this.reflectors = new StripField(
       [{ geometry: reflectorGeo, material: materials.reflectorAmber }],
       12,
@@ -270,9 +270,9 @@ export class Road {
 
     // Roadside distance signs.
     const signParts = new PartBuilder<"post" | "face">();
-    signParts.pair("post", () => roundedBox(0.1, 2.6, 0.1, 0.02, 1), 0.62, 1.3, 0);
+    signParts.pair("post", () => box(0.1, 2.6, 0.1), 0.62, 1.3, 0);
     signParts.add("face", (() => {
-      const face = roundedBox(1.9, 1.15, 0.09, 0.06, 1);
+      const face = box(1.9, 1.15, 0.09);
       face.translate(0, 3.1, 0);
       return face;
     })());

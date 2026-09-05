@@ -487,17 +487,13 @@ export const TRAFFIC_KINDS: VehicleKind[] = ["sedan", "suv", "sports", "van", "p
 function tireGeometry(): THREE.BufferGeometry {
   const profile: THREE.Vector2[] = [
     new THREE.Vector2(0.7, -0.5),
-    new THREE.Vector2(0.86, -0.5),
-    new THREE.Vector2(0.95, -0.47),
-    new THREE.Vector2(0.985, -0.38),
-    new THREE.Vector2(0.995, -0.2),
-    new THREE.Vector2(0.995, 0.2),
-    new THREE.Vector2(0.985, 0.38),
-    new THREE.Vector2(0.95, 0.47),
-    new THREE.Vector2(0.86, 0.5),
+    new THREE.Vector2(0.93, -0.5),
+    new THREE.Vector2(0.995, -0.34),
+    new THREE.Vector2(0.995, 0.34),
+    new THREE.Vector2(0.93, 0.5),
     new THREE.Vector2(0.7, 0.5),
   ];
-  const geo = new THREE.LatheGeometry(profile, 20);
+  const geo = new THREE.LatheGeometry(profile, 16);
   geo.rotateZ(Math.PI / 2);
   return geo;
 }
@@ -510,22 +506,22 @@ function tireGeometry(): THREE.BufferGeometry {
 function rimGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  const lip = new THREE.TorusGeometry(0.7, 0.05, 5, 20);
+  const lip = new THREE.TorusGeometry(0.7, 0.05, 4, 16);
   lip.rotateY(Math.PI / 2);
   lip.translate(0.28, 0, 0);
   parts.push(lip);
 
-  const barrel = new THREE.CylinderGeometry(0.69, 0.66, 0.86, 20, 1, true);
+  const barrel = new THREE.CylinderGeometry(0.69, 0.66, 0.86, 16, 1, true);
   barrel.rotateZ(Math.PI / 2);
   barrel.translate(-0.05, 0, 0);
   parts.push(barrel);
 
-  const hub = new THREE.CylinderGeometry(0.21, 0.17, 0.14, 14);
+  const hub = new THREE.CylinderGeometry(0.21, 0.17, 0.14, 10);
   hub.rotateZ(Math.PI / 2);
   hub.translate(0.24, 0, 0);
   parts.push(hub);
 
-  const dish = new THREE.CylinderGeometry(0.67, 0.67, 0.03, 20);
+  const dish = new THREE.CylinderGeometry(0.67, 0.67, 0.03, 16);
   dish.rotateZ(Math.PI / 2);
   dish.translate(-0.4, 0, 0);
   parts.push(dish);
@@ -567,7 +563,6 @@ const SCRATCH_POS = new THREE.Vector3();
 const SCRATCH_SCALE = new THREE.Vector3();
 const SCRATCH_MATRIX = new THREE.Matrix4();
 const SCRATCH_OFFSET = new THREE.Vector3();
-const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /**
  * Every wheel in the scene, drawn from three instanced meshes regardless of how many cars are
@@ -579,14 +574,18 @@ export class WheelSystem {
   private readonly rims: THREE.InstancedMesh;
   private readonly brakes: THREE.InstancedMesh;
   private count = 0;
+  private rimCount = 0;
   private brakeCount = 0;
+
+  /** Wheels close enough to show spokes: the player plus a handful of nearby cars. */
+  private readonly rimCapacity = 40;
 
   constructor(
     private readonly capacity: number,
     materials: Materials,
   ) {
     this.tires = new THREE.InstancedMesh(tireGeometry(), materials.tire, capacity);
-    this.rims = new THREE.InstancedMesh(rimGeometry(), materials.rim, capacity);
+    this.rims = new THREE.InstancedMesh(rimGeometry(), materials.rim, this.rimCapacity);
     this.brakes = new THREE.InstancedMesh(brakeGeometry(), materials.brake, 8);
     for (const mesh of [this.tires, this.rims, this.brakes]) {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -596,7 +595,7 @@ export class WheelSystem {
       this.group.add(mesh);
     }
     this.rims.instanceColor = new THREE.InstancedBufferAttribute(
-      new Float32Array(capacity * 3).fill(1),
+      new Float32Array(this.rimCapacity * 3).fill(1),
       3,
     );
     this.brakes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(24).fill(1), 3);
@@ -610,6 +609,7 @@ export class WheelSystem {
 
   beginFrame(): void {
     this.count = 0;
+    this.rimCount = 0;
     this.brakeCount = 0;
   }
 
@@ -625,6 +625,8 @@ export class WheelSystem {
     verticalOffset: number,
     rimColor: THREE.Color,
     brakeColor: THREE.Color | null,
+    /** Spokes are a few pixels wide on distant cars, so far wheels get the tyre only. */
+    detailed = true,
   ): void {
     if (this.count >= this.capacity) return;
     const slot = this.count++;
@@ -641,8 +643,11 @@ export class WheelSystem {
     SCRATCH_SCALE.set(spec.width, spec.radius, spec.radius);
     SCRATCH_MATRIX.compose(SCRATCH_POS, SCRATCH_QUAT, SCRATCH_SCALE);
     this.tires.setMatrixAt(slot, SCRATCH_MATRIX);
-    this.rims.setMatrixAt(slot, SCRATCH_MATRIX);
-    this.rims.instanceColor!.setXYZ(slot, rimColor.r, rimColor.g, rimColor.b);
+    if (detailed && this.rimCount < this.rimCapacity) {
+      const rimSlot = this.rimCount++;
+      this.rims.setMatrixAt(rimSlot, SCRATCH_MATRIX);
+      this.rims.instanceColor!.setXYZ(rimSlot, rimColor.r, rimColor.g, rimColor.b);
+    }
 
     if (brakeColor && this.brakeCount < 8) {
       const brakeSlot = this.brakeCount++;
@@ -657,14 +662,11 @@ export class WheelSystem {
   }
 
   endFrame(): void {
-    for (let i = this.count; i < this.capacity; i++) {
-      this.tires.setMatrixAt(i, HIDDEN);
-      this.rims.setMatrixAt(i, HIDDEN);
-    }
-    for (let i = this.brakeCount; i < 8; i++) this.brakes.setMatrixAt(i, HIDDEN);
-    this.tires.count = this.capacity;
-    this.rims.count = this.capacity;
-    this.brakes.count = 8;
+    // Instance counts are trimmed to what was actually pushed; unused slots would still run the
+    // vertex shader even with a zero-scale matrix.
+    this.tires.count = this.count;
+    this.rims.count = this.rimCount;
+    this.brakes.count = this.brakeCount;
     this.tires.instanceMatrix.needsUpdate = true;
     this.rims.instanceMatrix.needsUpdate = true;
     this.rims.instanceColor!.needsUpdate = true;

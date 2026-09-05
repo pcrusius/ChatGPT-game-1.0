@@ -113,6 +113,14 @@ function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
 }
 
 /** Box with rounded vertical edges and a bevelled cap, centred on the origin. */
+/**
+ * Plain 12-triangle box. Used for small or distant props where a bevel costs 48 extra triangles
+ * and is never more than a pixel wide on screen.
+ */
+export function box(w: number, h: number, d: number): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(w, h, d);
+}
+
 export function roundedBox(w: number, h: number, d: number, r = 0.06, curve = 2): THREE.BufferGeometry {
   const bevel = Math.min(r, d / 2 - 1e-3);
   const geo = new THREE.ExtrudeGeometry(roundedRectShape(w, h, r), {
