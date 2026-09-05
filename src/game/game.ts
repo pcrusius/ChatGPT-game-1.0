@@ -1,266 +1,589 @@
 import * as THREE from "three";
 import {
-  LANE_CHANGE_TIME,
+  DESPAWN_Z,
   MAX_SPEED,
   PLAYER_HALF_LENGTH,
   PLAYER_HALF_WIDTH,
-  SPAWN_DISTANCE,
-  SPEED_GAIN,
   START_SPEED,
+  laneX,
   type SkinId,
 } from "./config";
-import { AudioFx } from "./audio";
-import { ChaseCamera } from "./cameraRig";
-import { EntityField, spawnPattern } from "./obstacles";
-import { FX } from "./effects";
+import { AdaptiveQuality, detectQuality, settingsFor, type QualityLevel, type QualitySettings } from "../core/quality";
+import { DebugOverlay } from "../core/debug";
+import { Materials } from "../render/materials";
+import { WheelSystem } from "../render/vehicles";
+import { World } from "../world/world";
+import { Sky } from "../world/sky";
+import { THEMES, THEME_ORDER, blendThemes, makeBlend, type ThemeId } from "../world/themes";
+import { CameraRig } from "./camera";
+import { Director } from "./director";
+import { EntityField } from "./entities";
+import { GroundShadows, Particles } from "./effects";
 import { Player } from "./player";
-import { World } from "./world";
+import { AudioEngine } from "./audio";
+import type { MissionProgress } from "./storage";
 
-export type GameState = "menu" | "garage" | "playing" | "crashed";
+export type GameState = "menu" | "garage" | "playing" | "paused" | "crashed";
 
-export interface RunStats {
+export interface HudState {
   score: number;
   coins: number;
+  speedKph: number;
+  multiplier: number;
+  streak: number;
+  themeName: string;
+  difficulty: string;
+  distance: number;
+}
+
+export interface RunResult {
+  score: number;
+  coins: number;
+  distance: number;
+  nearMisses: number;
+  jumps: number;
+  topSpeed: number;
 }
 
 export interface GameHooks {
-  onHud(score: number, coins: number, speedKmh: number): void;
-  onGameOver(stats: RunStats): void;
-  onCoinBanked(total: number): void;
+  onHud?: (hud: HudState) => void;
+  onCoin?: (streak: number, multiplier: number) => void;
+  onNearMiss?: (bonus: number) => void;
+  onMilestone?: (score: number) => void;
+  onCrash?: (result: RunResult) => void;
+  onStateChange?: (state: GameState) => void;
+  onQualityChange?: (level: QualityLevel) => void;
+  onSpeedFactor?: (factor: number) => void;
 }
 
+const KPH = 3.6;
+
+/**
+ * Owns the renderer, the scene graph and the run loop. Everything that can be preallocated is
+ * built in the constructor; the per-frame path does no allocation and no material work.
+ */
 export class Game {
-  readonly scene = new THREE.Scene();
   readonly renderer: THREE.WebGLRenderer;
-  readonly rig = new ChaseCamera();
-  readonly world: World;
-  readonly player: Player;
-  readonly field = new EntityField();
-  readonly fx = new FX();
-  readonly audio = new AudioFx();
+  readonly scene = new THREE.Scene();
+  readonly rig: CameraRig;
+  readonly hooks: GameHooks = {};
 
   state: GameState = "menu";
   score = 0;
-  runCoins = 0;
-  speed = START_SPEED;
+  coins = 0;
   distance = 0;
+  speed = START_SPEED;
 
+  private readonly canvas: HTMLCanvasElement;
+  private readonly materials: Materials;
+  private readonly wheels: WheelSystem;
+  private readonly world: World;
+  private readonly field: EntityField;
+  private readonly particles: Particles;
+  private readonly shadows: GroundShadows;
+  private readonly player: Player;
+  private readonly director = new Director();
+  private readonly debug = new DebugOverlay();
+  private readonly adaptive: AdaptiveQuality;
+  private readonly audio: AudioEngine;
+
+  private quality: QualitySettings;
+  private readonly envMaps = new Map<ThemeId, THREE.Texture>();
+  private appliedEnv: ThemeId | null = null;
+
+  private readonly hud: HudState = {
+    score: 0,
+    coins: 0,
+    speedKph: 0,
+    multiplier: 1,
+    streak: 0,
+    themeName: "",
+    difficulty: "",
+    distance: 0,
+  };
+
+  private multiplier = 1;
+  private coinStreak = 0;
+  private nearMisses = 0;
+  private jumps = 0;
+  private topSpeed = 0;
+  private lastMilestone = 0;
   private clock = new THREE.Clock();
-  private spawnCountdown = 60;
-  private previousSafeLanes = [0, 1, 2];
+  private previousX = 0;
+  private lateralVelocity = 0;
+  private running = false;
   private crashTimer = 0;
-  private gameOverFired = false;
-  private hudTimer = 0;
-  private smokeTimer = 0;
-  private menuSpin = 0;
+  private selectedSkin: SkinId = "red";
+  private dustTimer = 0;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-    skin: SkinId,
-    private readonly hooks: GameHooks,
-  ) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  constructor(canvas: HTMLCanvasElement, audio: AudioEngine, requestedQuality: QualityLevel | "auto") {
+    this.canvas = canvas;
+    this.audio = audio;
+    const level = requestedQuality === "auto" ? detectQuality() : requestedQuality;
+    this.quality = settingsFor(level);
+
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: level !== "low",
+      powerPreference: "high-performance",
+      stencil: false,
+    });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.maxPixelRatio));
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = this.quality.shadows;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = true;
+    this.renderer.info.autoReset = true;
 
-    this.world = new World(this.scene, this.renderer);
-    this.player = new Player(skin);
-    this.scene.add(this.player.mesh);
+    this.materials = new Materials(this.quality);
+    this.wheels = new WheelSystem(96, this.materials);
+    this.scene.add(this.wheels.group);
+
+    this.world = new World(this.scene, this.materials, this.quality);
+
+    this.field = new EntityField(this.materials, this.wheels);
     this.scene.add(this.field.group);
-    this.scene.add(this.fx.group);
 
-    this.resize();
+    this.particles = new Particles(this.materials, this.quality);
+    this.scene.add(this.particles.points);
+
+    this.shadows = new GroundShadows(this.materials);
+    this.scene.add(this.shadows.mesh);
+
+    this.player = new Player(this.materials, "red", this.quality.shadows);
+    this.scene.add(this.player.group);
+    this.player.on((event) => this.onPlayerEvent(event));
+
+    this.rig = new CameraRig(window.innerWidth / Math.max(1, window.innerHeight));
+    this.rig.setMode("menu");
+
+    this.adaptive = new AdaptiveQuality(level, (next) => {
+      this.setQuality(next);
+      this.hooks.onQualityChange?.(next);
+    });
+
+    this.buildEnvironmentMaps();
+    this.field.setCastShadow(false);
+
     window.addEventListener("resize", () => this.resize());
+    this.resize();
   }
 
-  private resize(): void {
+  /**
+   * Pre-bakes one irradiance map per theme from the sky shader. Doing this up front avoids a
+   * multi-frame hitch mid-run, and the maps are what make the car paint read as metallic.
+   */
+  private buildEnvironmentMaps(): void {
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    pmrem.compileEquirectangularShader();
+    const scratchScene = new THREE.Scene();
+    const sky = new Sky();
+    scratchScene.add(sky.mesh);
+    const blend = makeBlend();
+    for (const id of THEME_ORDER) {
+      const theme = THEMES[id];
+      sky.apply(blendThemes(theme, theme, 0, blend));
+      this.envMaps.set(id, pmrem.fromScene(scratchScene, 0, 1, 1200).texture);
+    }
+    sky.dispose();
+    pmrem.dispose();
+    this.applyEnvironment("coastal");
+  }
+
+  private applyEnvironment(id: ThemeId): void {
+    if (this.appliedEnv === id) return;
+    this.appliedEnv = id;
+    this.scene.environment = this.envMaps.get(id) ?? null;
+  }
+
+  get currentQuality(): QualityLevel {
+    return this.quality.level;
+  }
+
+  setQuality(level: QualityLevel): void {
+    this.quality = settingsFor(level);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.maxPixelRatio));
+    this.renderer.shadowMap.enabled = this.quality.shadows;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.materials.setQuality(this.quality);
+    this.world.setQuality(this.quality);
+    this.player.setShadow(this.quality.shadows);
+    this.wheels.setShadows(false);
+    this.adaptive.setLevel(level);
+    this.resize();
+  }
+
+  /** Called when the player picks a tier by hand; stops the automatic downgrade watchdog. */
+  lockQuality(): void {
+    this.adaptive.disable();
+  }
+
+  resize(): void {
     const width = window.innerWidth;
-    const height = window.innerHeight;
+    const height = Math.max(1, window.innerHeight);
     this.renderer.setSize(width, height, false);
-    this.rig.resize(width, height);
+    this.rig.resize(width / height);
   }
 
   setSkin(skin: SkinId): void {
-    this.player.setSkin(skin);
+    this.selectedSkin = skin;
+    this.player.applySkin(skin);
+  }
+
+  toggleDebug(): void {
+    this.debug.toggle();
+  }
+
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    this.clock.start();
+    this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  stop(): void {
+    this.running = false;
+    this.renderer.setAnimationLoop(null);
+  }
+
+  private setState(state: GameState): void {
+    if (this.state === state) return;
+    this.state = state;
+    this.hooks.onStateChange?.(state);
   }
 
   showMenu(): void {
-    this.state = "menu";
-    this.field.clear();
-    this.fx.clear();
+    this.setState("menu");
+    this.rig.setMode("menu");
     this.player.reset();
+    this.player.showcase(2.4);
+    this.field.clear();
+    this.particles.clear();
+    this.world.forceTheme("coastal");
+    this.applyEnvironment("coastal");
   }
 
   showGarage(): void {
-    this.state = "garage";
-    this.field.clear();
+    this.setState("garage");
+    this.rig.setMode("garage");
     this.player.reset();
+    this.player.showcase(2.4);
+    this.field.clear();
+    this.particles.clear();
   }
 
   startRun(): void {
-    this.field.clear();
-    this.fx.clear();
-    this.player.reset();
-    this.state = "playing";
+    this.setState("playing");
     this.score = 0;
-    this.runCoins = 0;
-    this.speed = START_SPEED;
+    this.coins = 0;
     this.distance = 0;
-    this.spawnCountdown = 70;
-    this.previousSafeLanes = [0, 1, 2];
+    this.speed = START_SPEED;
+    this.multiplier = 1;
+    this.coinStreak = 0;
+    this.nearMisses = 0;
+    this.jumps = 0;
+    this.topSpeed = 0;
+    this.lastMilestone = 0;
     this.crashTimer = 0;
-    this.gameOverFired = false;
-    this.rig.snapToChase();
-    this.audio.resume();
-    this.hooks.onHud(0, 0, this.speed * 3.6);
+    this.field.clear();
+    this.particles.clear();
+    this.director.reset();
+    this.player.reset();
+    this.player.applySkin(this.selectedSkin);
+    this.world.resetThemes();
+    this.applyEnvironment("coastal");
+    this.rig.snapToChase(this.player.x);
+    this.previousX = this.player.x;
+  }
+
+  pause(): void {
+    if (this.state !== "playing") return;
+    this.setState("paused");
+  }
+
+  resume(): void {
+    if (this.state !== "paused") return;
+    this.setState("playing");
   }
 
   input(action: "left" | "right" | "jump"): void {
     if (this.state !== "playing") return;
-    if (action === "left") this.player.shift(-1);
-    else if (action === "right") this.player.shift(1);
-    else if (this.player.jump()) {
+    if (action === "left") this.player.move(-1);
+    else if (action === "right") this.player.move(1);
+    else this.player.jump();
+  }
+
+  private onPlayerEvent(event: "jump" | "land" | "laneChange"): void {
+    if (event === "jump") {
+      this.jumps += 1;
       this.audio.jump();
-      this.fx.burst(new THREE.Vector3(this.player.x, 0.25, 1.6), 0xbfc7d2, 8, 4, 0.6);
+      this.particles.burst("landing", this.player.x, 0.1, 0, 0.55);
+      this.rig.bump(-0.16);
+    } else if (event === "land") {
+      this.audio.land(1);
+      this.particles.burst("landing", this.player.x, 0.1, 0, 1.1);
+      this.rig.bump(0.34);
+      this.rig.kick(0.13, 8);
     }
   }
 
-  private updateSpawning(dt: number): void {
-    this.spawnCountdown -= this.speed * dt;
-    if (this.spawnCountdown > 0) return;
+  private frame(): void {
+    const dt = Math.min(this.clock.getDelta(), 1 / 20);
+    this.debug.update(dt, this.renderer, {
+      state: this.state,
+      entities: this.field.entities.filter((e) => e.active).length,
+      quality: this.quality.level,
+      theme: this.world.currentThemeName,
+      speed: `${(this.speed * KPH).toFixed(0)} kph`,
+    });
+    this.adaptive.update(dt);
 
-    const gapTime = 1.05;
-    const laneChangesAllowed = Math.max(
-      1,
-      Math.min(2, Math.floor(gapTime / (LANE_CHANGE_TIME + 0.12))),
-    );
-    const result = spawnPattern(
-      this.field,
-      {
-        distance: this.distance,
-        speed: this.speed,
-        spawnZ: -SPAWN_DISTANCE,
-        previousSafeLanes: this.previousSafeLanes,
-      },
-      laneChangesAllowed,
-    );
-    this.previousSafeLanes = result.safeLanes;
-    this.spawnCountdown = result.depth + Math.max(26, this.speed * gapTime);
+    if (this.state === "playing" || this.state === "crashed") {
+      this.simulate(dt);
+    } else {
+      this.idle(dt);
+    }
+
+    this.renderer.render(this.scene, this.rig.camera);
   }
 
-  private checkCollisions(): void {
-    for (const entity of this.field.entities) {
-      if (entity.collected) continue;
-      const dz = Math.abs(entity.z);
-      if (dz > entity.halfLength + PLAYER_HALF_LENGTH) continue;
-      const dx = Math.abs(entity.object.position.x - this.player.x);
-      if (dx > entity.halfWidth + PLAYER_HALF_WIDTH) continue;
+  /** Menu and garage: the car idles on a plinth and the camera drifts. */
+  private idle(dt: number): void {
+    this.wheels.beginFrame();
+    this.shadows.begin();
+    this.player.update(dt, 0, this.wheels);
+    this.shadows.push(this.player.x, 0, 3.4, 6.4, 1);
+    this.shadows.end();
+    this.wheels.endFrame();
+    this.particles.update(dt);
+    this.world.update(0, dt, 0);
+    this.rig.update(dt, this.player.x, 0, 0, 0, false);
+    this.audio.updateDrive(0.12, this.state === "menu" || this.state === "garage" ? 0.35 : 0);
+    this.hooks.onSpeedFactor?.(0);
+  }
 
-      if (entity.kind === "coin") {
-        if (Math.abs(this.player.y + 0.55 - entity.object.position.y) > 1.75) continue;
-        entity.collected = true;
-        this.runCoins += 1;
-        this.audio.coin();
-        this.fx.burst(entity.object.position.clone(), 0xffd257, 16, 6, 1.2);
-        this.hooks.onCoinBanked(this.runCoins);
+  private simulate(dt: number): void {
+    const playing = this.state === "playing";
+
+    if (playing) {
+      // Speed ramps quickly at first then asymptotes, so early play is forgiving.
+      const ramp = 1 - Math.exp(-this.distance / 1500);
+      this.speed = START_SPEED + (MAX_SPEED - START_SPEED) * ramp;
+      this.topSpeed = Math.max(this.topSpeed, this.speed);
+    } else {
+      this.speed *= 1 - Math.min(dt * 1.8, 0.9);
+    }
+
+    const scroll = this.speed * dt;
+    if (playing) this.distance += scroll;
+
+    this.lateralVelocity = (this.player.x - this.previousX) / Math.max(dt, 1e-4);
+    this.previousX = this.player.x;
+
+    this.wheels.beginFrame();
+    this.shadows.begin();
+
+    this.player.update(dt, this.speed, this.wheels);
+    // Player contact shadow shrinks and fades while airborne.
+    const lift = THREE.MathUtils.clamp(this.player.y / 2.5, 0, 1);
+    this.shadows.push(this.player.x, 0, 3.2 * (1 - lift * 0.45), 6.0 * (1 - lift * 0.4), 1);
+
+    if (playing) this.director.update(scroll, this.distance, this.speed, this.field);
+    this.field.update(dt, playing ? scroll : 0, this.shadows);
+
+    this.shadows.end();
+    this.wheels.endFrame();
+
+    if (playing) this.collide(dt);
+
+    this.emitDriveEffects(dt, playing);
+    this.particles.update(dt);
+    this.world.update(this.distance, dt, this.rig.camera.position.z);
+    this.applyEnvironment(this.world.dominantTheme);
+    this.renderer.toneMappingExposure = this.world.theme.exposure;
+    this.shadows.setOpacity(0.42 * (1 - this.world.theme.nightFactor * 0.55));
+
+    this.rig.update(
+      dt,
+      this.player.x,
+      this.player.y,
+      this.speed,
+      this.lateralVelocity,
+      !playing,
+    );
+
+    const speedRatio = THREE.MathUtils.clamp((this.speed - START_SPEED) / (MAX_SPEED - START_SPEED), 0, 1);
+    this.audio.updateDrive(speedRatio, playing ? 1 : 0.15);
+    this.hooks.onSpeedFactor?.(playing ? speedRatio : 0);
+
+    if (playing) {
+      this.score += scroll * 1.1 * this.multiplier;
+      const milestone = Math.floor(this.score / 1000);
+      if (milestone > this.lastMilestone) {
+        this.lastMilestone = milestone;
+        this.multiplier = Math.min(6, this.multiplier + 0.25);
+        this.audio.milestone();
+        this.hooks.onMilestone?.(Math.floor(this.score));
+      }
+      this.publishHud();
+    } else {
+      this.crashTimer += dt;
+    }
+  }
+
+  private emitDriveEffects(dt: number, playing: boolean): void {
+    if (!playing) return;
+    // Tyre dust when the car is planted and moving quickly.
+    this.dustTimer += dt * (this.speed / 12);
+    while (this.dustTimer > 1) {
+      this.dustTimer -= 1;
+      if (this.player.airborne) break;
+      const side = Math.random() < 0.5 ? -0.82 : 0.82;
+      this.particles.burst("dust", this.player.x + side, 0.08, 1.4, 0.6);
+    }
+    this.particles.emitWind(
+      dt,
+      this.speed,
+      this.rig.camera.position.x,
+      this.rig.camera.position.z,
+      this.quality.speedStreaks,
+    );
+  }
+
+  private publishHud(): void {
+    this.hud.score = Math.floor(this.score);
+    this.hud.coins = this.coins;
+    this.hud.speedKph = Math.round(this.speed * KPH);
+    this.hud.multiplier = this.multiplier;
+    this.hud.streak = this.coinStreak;
+    this.hud.themeName = this.world.currentThemeName;
+    this.hud.difficulty = this.director.difficulty(this.distance).label;
+    this.hud.distance = Math.floor(this.distance);
+    this.hooks.onHud?.(this.hud);
+  }
+
+  /** Narrow-phase collision against the few entities near the car. */
+  private collide(dt: number): void {
+    void dt;
+    for (const entity of this.field.entities) {
+      if (!entity.active || entity.role === "decor") continue;
+      if (entity.z < -12 || entity.z > DESPAWN_Z) continue;
+
+      const ex = entity.x + entity.laneDrift;
+      const dx = Math.abs(ex - this.player.x);
+      const dz = Math.abs(entity.z);
+
+      if (entity.role === "coin") {
+        if (entity.collectT >= 0) continue;
+        const dy = Math.abs(entity.y - (this.player.y + 0.7));
+        if (dz < 1.5 && dx < 1.25 && dy < 1.15) this.collectCoin(entity.x, entity.y, entity.z, entity);
         continue;
       }
 
-      if (entity.kind === "hurdle" && this.player.y > entity.clearHeight) continue;
+      const zOverlap = dz < entity.halfLength + PLAYER_HALF_LENGTH;
+      if (!zOverlap) continue;
 
-      this.crash(entity.object.position.clone());
-      return;
+      const xOverlap = dx < entity.halfWidth + PLAYER_HALF_WIDTH;
+      if (xOverlap) {
+        // Airborne above a low obstacle counts as cleared, not a hit.
+        if (this.player.y > entity.height + 0.05) continue;
+        this.crash(ex);
+        return;
+      }
+
+      // Near miss: shaved past without touching.
+      const clearance = dx - (entity.halfWidth + PLAYER_HALF_WIDTH);
+      if (!entity.nearMissed && entity.role === "traffic" && clearance < 0.75 && dz < 2.4) {
+        entity.nearMissed = true;
+        this.nearMisses += 1;
+        this.multiplier = Math.min(6, this.multiplier + 0.15);
+        const bonus = Math.round(120 * this.multiplier);
+        this.score += bonus;
+        this.audio.nearMiss();
+        this.particles.burst("spark", ex + Math.sign(this.player.x - ex) * entity.halfWidth, 0.9, entity.z, 0.7);
+        this.hooks.onNearMiss?.(bonus);
+      }
     }
   }
 
-  private crash(at: THREE.Vector3): void {
-    if (this.state !== "playing") return;
-    this.state = "crashed";
-    this.crashTimer = 0;
-    this.player.crash();
-    this.rig.impact(1.15);
+  private collectCoin(x: number, y: number, z: number, entity: { collectT: number }): void {
+    entity.collectT = 0;
+    this.coins += 1;
+    this.coinStreak += 1;
+    if (this.coinStreak % 8 === 0) this.multiplier = Math.min(6, this.multiplier + 0.2);
+    this.score += 25 * this.multiplier;
+    this.particles.burst("coin", x, y, z, 1);
+    this.audio.coin(this.coinStreak);
+    this.hooks.onCoin?.(this.coinStreak, this.multiplier);
+  }
+
+  private crash(impactX: number): void {
+    this.setState("crashed");
+    this.player.crash(impactX - this.player.x);
+    this.particles.burst("crash", this.player.x, 0.9, 0, 1);
+    this.particles.burst("spark", this.player.x, 0.6, -1.4, 1.4);
+    this.rig.kick(1.5, 2.4);
     this.audio.crash();
-    at.y = 0.9;
-    this.fx.burst(at, 0xff7a1f, 46, 13, 1.6);
-    this.fx.burst(at, 0xfff0b0, 26, 9, 1.4);
-    this.fx.burst(new THREE.Vector3(this.player.x, 0.8, 0), 0x555555, 22, 5, 1.8);
+    this.coinStreak = 0;
+    this.hooks.onCrash?.(this.result());
   }
 
-  private updateHud(force = false): void {
-    this.hudTimer += 1;
-    if (!force && this.hudTimer % 4 !== 0) return;
-    this.hooks.onHud(Math.floor(this.score), this.runCoins, this.speed * 3.6);
+  result(): RunResult {
+    return {
+      score: Math.floor(this.score),
+      coins: this.coins,
+      distance: Math.floor(this.distance),
+      nearMisses: this.nearMisses,
+      jumps: this.jumps,
+      topSpeed: this.topSpeed,
+    };
   }
 
-  tick = (): void => {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+  missionProgress(): MissionProgress {
+    return {
+      distance: Math.floor(this.distance),
+      coins: this.coins,
+      jumps: this.jumps,
+      nearMisses: this.nearMisses,
+      topSpeed: this.topSpeed,
+    };
+  }
 
-    if (this.state === "playing" || this.state === "crashed") {
-      const scroll = this.state === "playing" ? this.speed : this.speed * 0.35;
+  /** Debug/testing hook: force an environment so all three can be inspected on demand. */
+  forceTheme(id: ThemeId): void {
+    this.world.forceTheme(id);
+    this.applyEnvironment(id);
+  }
 
-      if (this.state === "playing") {
-        this.speed = Math.min(MAX_SPEED, this.speed + SPEED_GAIN * dt);
-        this.distance += this.speed * dt;
-        this.score += this.speed * dt * 1.15;
-        this.updateSpawning(dt);
-      } else {
-        this.speed = Math.max(0, this.speed - 26 * dt);
-      }
+  clearThemeOverride(): void {
+    this.world.clearThemeOverride();
+  }
 
-      this.world.scroll(scroll * dt);
-      // Obstacles freeze on impact; letting them keep closing drives them through the
-      // wrecked car during the crash animation.
-      this.field.update(dt, this.state === "playing" ? scroll : 0);
-      this.player.update(dt, scroll);
+  get canRestart(): boolean {
+    return this.state === "crashed" && this.crashTimer > 0.4;
+  }
 
-      if (this.state === "playing") {
-        this.checkCollisions();
-        this.smokeTimer -= dt;
-        if (this.smokeTimer <= 0 && this.speed > START_SPEED + 6) {
-          this.smokeTimer = 0.07;
-          this.fx.burst(
-            new THREE.Vector3(this.player.x + (Math.random() - 0.5) * 1.5, 0.32, 2.3),
-            0xd8d2c6,
-            2,
-            1.6,
-            0.5,
-          );
-        }
-      } else {
-        this.crashTimer += dt;
-        if (!this.gameOverFired && this.crashTimer > 0.85) {
-          this.gameOverFired = true;
-          this.hooks.onGameOver({ score: Math.floor(this.score), coins: this.runCoins });
-        }
-      }
+  get lanePosition(): number {
+    return laneX(this.player.lane);
+  }
 
-      this.rig.chase(this.player.x, this.player.y, this.speed, dt);
-      this.updateHud();
-    } else {
-      this.menuSpin += dt;
-      this.world.scroll(16 * dt);
-      this.player.update(dt, 16);
-      if (this.state === "garage") {
-        this.player.mesh.rotation.y = this.menuSpin * 0.55;
-        this.rig.garage(dt);
-      } else {
-        this.player.mesh.rotation.y = Math.sin(this.menuSpin * 0.35) * 0.3;
-        this.rig.menu(dt);
-      }
-    }
+  get fps(): number {
+    return this.debug.currentFps;
+  }
 
-    this.fx.update(dt, this.state === "playing" || this.state === "crashed" ? this.speed : 16);
-    this.world.followShadow(0);
-    this.renderer.render(this.scene, this.rig.camera);
-    requestAnimationFrame(this.tick);
-  };
-
-  start(): void {
-    this.clock.start();
-    requestAnimationFrame(this.tick);
+  dispose(): void {
+    this.stop();
+    this.world.dispose();
+    this.field.dispose();
+    this.particles.dispose();
+    this.shadows.dispose();
+    this.wheels.dispose();
+    this.materials.dispose();
+    for (const map of this.envMaps.values()) map.dispose();
+    this.renderer.dispose();
+    void this.canvas;
   }
 }

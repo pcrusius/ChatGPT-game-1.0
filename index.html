@@ -2,89 +2,198 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Apex Rush</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#05070d" />
+    <title>Apex Rush — Endless Highway Racer</title>
+    <link rel="icon" href="data:," />
   </head>
   <body>
-    <div id="app">
-      <canvas id="game-canvas"></canvas>
+    <canvas id="scene"></canvas>
 
-      <div id="hud" class="hidden">
-        <div class="hud-panel hud-left">
-          <div class="hud-label">SCORE</div>
-          <div id="hud-score" class="hud-value">0</div>
-        </div>
-        <div class="hud-panel hud-center">
-          <div class="hud-label">SPEED</div>
-          <div id="hud-speed" class="hud-value">0<span class="hud-unit">KM/H</span></div>
-        </div>
-        <div class="hud-panel hud-right">
-          <div class="hud-label">COINS</div>
-          <div id="hud-coins" class="hud-value">0</div>
-        </div>
-      </div>
-
-      <div id="start-screen" class="overlay overlay--left">
-        <div class="overlay-card">
-          <p class="eyebrow">THREE-LANE HIGHWAY</p>
-          <h1>APEX RUSH</h1>
-          <p class="tagline">Drive forever. Dodge traffic. Collect gold.</p>
-          <div class="button-row">
-            <button id="play-btn" class="btn primary">PLAY</button>
-            <button id="garage-btn" class="btn">GARAGE</button>
-          </div>
-          <div class="controls-guide">
-            <div><kbd>←</kbd><kbd>→</kbd><span>Change lanes</span></div>
-            <div><kbd>SPACE</kbd><span>Jump</span></div>
-            <div><kbd>R</kbd><span>Restart after crash</span></div>
-          </div>
-          <p id="start-best" class="meta">HIGH SCORE 0 · BANK 0</p>
-        </div>
-      </div>
-
-      <div id="garage-screen" class="overlay overlay--left hidden">
-        <div class="overlay-card garage-card">
-          <p class="eyebrow">CUSTOM SHOP</p>
-          <h2>GARAGE</h2>
-          <p id="garage-bank" class="meta">BANK 0 COINS</p>
-          <div id="skin-grid" class="skin-grid"></div>
-          <button id="garage-back-btn" class="btn">BACK</button>
-        </div>
-      </div>
-
-      <div id="gameover-screen" class="overlay hidden">
-        <div class="overlay-card">
-          <p class="eyebrow crash">CRASHED</p>
-          <h2>GAME OVER</h2>
-          <div class="stats">
-            <div>
-              <div class="hud-label">SCORE</div>
-              <div id="over-score" class="hud-value">0</div>
-            </div>
-            <div>
-              <div class="hud-label">COINS</div>
-              <div id="over-coins" class="hud-value">0</div>
-            </div>
-            <div>
-              <div class="hud-label">BEST</div>
-              <div id="over-best" class="hud-value">0</div>
-            </div>
-          </div>
-          <div class="button-row">
-            <button id="retry-btn" class="btn primary">RACE AGAIN</button>
-            <button id="menu-btn" class="btn">MENU</button>
-          </div>
-          <p class="meta">PRESS R TO RESTART</p>
-        </div>
-      </div>
+    <div id="speed-fx" aria-hidden="true">
+      <div class="speed-fx__vignette"></div>
+      <div class="speed-fx__lines"></div>
     </div>
+
+    <!-- ------------------------------------------------------------------ HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud__top">
+        <div class="hud__block">
+          <span class="hud__label">Score</span>
+          <span class="hud__value" id="hud-score">0</span>
+          <span class="hud__sub" id="hud-distance">0 m</span>
+        </div>
+        <div class="hud__center">
+          <div class="hud__pill" id="hud-multiplier">×1.0</div>
+          <div class="hud__theme" id="hud-theme">Pacific Coast</div>
+        </div>
+        <div class="hud__block hud__block--right">
+          <span class="hud__label">Coins</span>
+          <span class="hud__value hud__value--coin" id="hud-coins">0</span>
+          <span class="hud__sub" id="hud-difficulty">Warm up</span>
+        </div>
+      </div>
+
+      <div class="hud__speed">
+        <div class="hud__speed-bar"><i id="hud-speed-fill"></i></div>
+        <div class="hud__speed-read">
+          <span id="hud-speed">0</span><em>km/h</em>
+        </div>
+      </div>
+
+      <div id="toasts"></div>
+    </div>
+
+    <!-- ----------------------------------------------------------------- MENU -->
+    <section id="screen-menu" class="screen">
+      <div class="panel panel--menu">
+        <div class="logo">
+          <span class="logo__apex">APEX</span>
+          <span class="logo__rush">RUSH</span>
+          <span class="logo__tag">Endless Highway</span>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <span class="stat__label">High score</span>
+            <strong id="menu-high">0</strong>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Total coins</span>
+            <strong id="menu-coins" class="stat--coin">0</strong>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Best distance</span>
+            <strong id="menu-distance">0 m</strong>
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button class="btn btn--primary" id="btn-play">Play</button>
+          <button class="btn" id="btn-garage">Garage</button>
+          <button class="btn" id="btn-settings">Settings</button>
+        </div>
+
+        <div class="missions">
+          <h3>Challenges</h3>
+          <ul id="mission-list"></ul>
+        </div>
+
+        <p class="hint">
+          <kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> lanes ·
+          <kbd>Space</kbd> jump · <kbd>Esc</kbd> pause · <kbd>R</kbd> restart · <kbd>F3</kbd> stats
+        </p>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------------- GARAGE -->
+    <section id="screen-garage" class="screen hidden">
+      <div class="panel panel--garage">
+        <header class="panel__head">
+          <h2>Garage</h2>
+          <div class="wallet"><span id="garage-wallet">0</span></div>
+        </header>
+
+        <div class="showroom">
+          <button class="nav" id="skin-prev" aria-label="Previous car">‹</button>
+          <div class="showroom__info">
+            <h3 id="skin-name">Crimson</h3>
+            <p id="skin-blurb">Track-bred launch livery</p>
+            <div class="swatches" id="skin-swatches"></div>
+            <div class="showroom__price" id="skin-price">Owned</div>
+          </div>
+          <button class="nav" id="skin-next" aria-label="Next car">›</button>
+        </div>
+
+        <div class="buttons">
+          <button class="btn btn--primary" id="btn-buy">Select</button>
+          <button class="btn" id="btn-garage-back">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------- SETTINGS -->
+    <section id="screen-settings" class="screen hidden">
+      <div class="panel panel--settings">
+        <header class="panel__head"><h2>Settings</h2></header>
+
+        <div class="setting">
+          <span class="setting__label">Graphics</span>
+          <div class="segmented" id="quality-group">
+            <button data-quality="auto">Auto</button>
+            <button data-quality="low">Low</button>
+            <button data-quality="medium">Medium</button>
+            <button data-quality="high">High</button>
+          </div>
+        </div>
+
+        <div class="setting">
+          <span class="setting__label">Sound effects</span>
+          <button class="toggle" id="toggle-sound">On</button>
+        </div>
+
+        <div class="setting">
+          <span class="setting__label">Music</span>
+          <button class="toggle" id="toggle-music">On</button>
+        </div>
+
+        <div class="setting">
+          <span class="setting__label">Environment preview</span>
+          <div class="segmented" id="theme-group">
+            <button data-theme="auto">Cycle</button>
+            <button data-theme="coastal">Coast</button>
+            <button data-theme="desert">Desert</button>
+            <button data-theme="night">Night</button>
+          </div>
+        </div>
+
+        <p class="hint">Auto graphics drops a tier if the frame rate cannot hold up.</p>
+
+        <div class="buttons">
+          <button class="btn btn--primary" id="btn-settings-back">Done</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ GAME OVER -->
+    <section id="screen-over" class="screen hidden">
+      <div class="panel panel--over">
+        <div class="record hidden" id="over-record">New record!</div>
+        <h2 class="over__title">Crashed</h2>
+
+        <div class="score-grid">
+          <div class="score-grid__main">
+            <span>Run score</span>
+            <strong id="over-score">0</strong>
+          </div>
+          <div><span>Best score</span><strong id="over-best">0</strong></div>
+          <div><span>Coins this run</span><strong class="stat--coin" id="over-coins">0</strong></div>
+          <div><span>Total coins</span><strong class="stat--coin" id="over-total">0</strong></div>
+          <div><span>Distance</span><strong id="over-distance">0 m</strong></div>
+          <div><span>Near misses</span><strong id="over-near">0</strong></div>
+        </div>
+
+        <div id="over-missions" class="over__missions hidden"></div>
+
+        <div class="buttons">
+          <button class="btn btn--primary" id="btn-again">Play again</button>
+          <button class="btn" id="btn-over-garage">Garage</button>
+          <button class="btn" id="btn-over-menu">Main menu</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------------------- PAUSE -->
+    <section id="screen-pause" class="screen hidden">
+      <div class="panel panel--pause">
+        <h2>Paused</h2>
+        <div class="buttons">
+          <button class="btn btn--primary" id="btn-resume">Resume</button>
+          <button class="btn" id="btn-pause-menu">Main menu</button>
+        </div>
+      </div>
+    </section>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
