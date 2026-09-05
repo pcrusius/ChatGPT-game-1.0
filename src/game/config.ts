@@ -15,7 +15,7 @@ export const SPAWN_DISTANCE = 170;
 export const DESPAWN_Z = 18;
 
 export const PLAYER_HALF_WIDTH = 0.82;
-export const PLAYER_HALF_LENGTH = 1.95;
+export const PLAYER_HALF_LENGTH = 2.12;
 
 export const STORAGE_KEY = "apex-rush-save-v1";
 

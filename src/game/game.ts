@@ -212,7 +212,9 @@ export class Game {
       }
 
       this.world.scroll(scroll * dt);
-      this.field.update(dt, scroll);
+      // Obstacles freeze on impact; letting them keep closing drives them through the
+      // wrecked car during the crash animation.
+      this.field.update(dt, this.state === "playing" ? scroll : 0);
       this.player.update(dt, scroll);
 
       if (this.state === "playing") {
