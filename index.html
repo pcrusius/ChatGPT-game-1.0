@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatGPT Game 1.0 — Snake</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1 class="title">Snake</h1>
+      <p class="subtitle">ChatGPT&nbsp;Game&nbsp;1.0</p>
+      <div class="hud">
+        <span id="score" class="score">Score: 0</span>
+        <span id="best" class="best">Best: 0</span>
+      </div>
+      <canvas id="board" width="480" height="480" aria-label="Snake game board"></canvas>
+      <p id="status" class="status">Press an arrow key or WASD to start</p>
+      <p class="hint">Arrows / WASD to move &middot; Space to pause &middot; R to restart</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

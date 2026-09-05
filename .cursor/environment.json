@@ -1,0 +1,11 @@
+{
+  "name": "ChatGPT Game 1.0",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [5173]
+}
