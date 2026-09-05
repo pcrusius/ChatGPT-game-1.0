@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "vite --host --port 5173",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host --port 4173"
+    "preview": "vite preview --host --port 4173",
+    "spec": "node tools/spec.mjs",
+    "profile": "node tools/profile.mjs",
+    "breakdown": "node tools/breakdown.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
   },
   "devDependencies": {
     "@types/three": "^0.170.0",
+    "puppeteer-core": "^25.10.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
   }
