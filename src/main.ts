@@ -58,6 +58,7 @@ const hudSpeedFill = el("hud-speed-fill");
 const hudMultiplier = el("hud-multiplier");
 const hudTheme = el("hud-theme");
 const hudDifficulty = el("hud-difficulty");
+const hudStreak = el("hud-streak");
 const hudDistance = el("hud-distance");
 const toasts = el("toasts");
 
@@ -71,6 +72,7 @@ game.hooks.onHud = (state: HudState) => {
   hudDistance.textContent = `${state.distance.toLocaleString()} m`;
   hudTheme.textContent = state.themeName;
   hudDifficulty.textContent = state.difficulty;
+  hudStreak.textContent = state.streak > 1 ? `${state.streak} streak` : "collected";
   const label = `×${state.multiplier.toFixed(1)}`;
   if (hudMultiplier.textContent !== label) {
     hudMultiplier.textContent = label;

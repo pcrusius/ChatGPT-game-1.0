@@ -57,6 +57,70 @@ export interface GameHooks {
 }
 
 const KPH = 3.6;
+/** Where the car parks for the menu and garage, clear of the left-hand UI panel. */
+const SHOWCASE_X = 2.4;
+
+/**
+ * Showroom floor for the menu and garage: a dark turntable with a lit rim and a pool of light,
+ * so the car is presented rather than just left standing on the asphalt.
+ */
+function buildPlinth(materials: Materials): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "plinth";
+
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(4.8, 48),
+    new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.32, metalness: 0.55 }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.03;
+  group.add(floor);
+
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(4.8, 0.055, 6, 48),
+    new THREE.MeshBasicMaterial({ color: 0xff8a3d }),
+  );
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = 0.05;
+  group.add(rim);
+
+  const pool = new THREE.Mesh(
+    new THREE.PlaneGeometry(13, 13),
+    new THREE.MeshBasicMaterial({
+      map: materials.glow,
+      color: 0xffd9a8,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.06;
+  group.add(pool);
+
+  return group;
+}
+
+/** Pool of light thrown forward by the headlights, faded in with the night factor. */
+function buildHeadlightPool(materials: Materials): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(11, 30),
+    new THREE.MeshBasicMaterial({
+      map: materials.glow,
+      color: 0xffeccb,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: true,
+    }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.frustumCulled = false;
+  mesh.name = "headlights";
+  return mesh;
+}
 
 /**
  * Owns the renderer, the scene graph and the run loop. Everything that can be preallocated is
@@ -81,6 +145,8 @@ export class Game {
   private readonly field: EntityField;
   private readonly particles: Particles;
   private readonly shadows: GroundShadows;
+  private readonly plinth: THREE.Group;
+  private readonly headlights: THREE.Mesh;
   private readonly player: Player;
   private readonly director = new Director();
   private readonly debug = new DebugOverlay();
@@ -152,6 +218,12 @@ export class Game {
 
     this.shadows = new GroundShadows(this.materials);
     this.scene.add(this.shadows.mesh);
+
+    this.plinth = buildPlinth(this.materials);
+    this.scene.add(this.plinth);
+
+    this.headlights = buildHeadlightPool(this.materials);
+    this.scene.add(this.headlights);
 
     this.player = new Player(this.materials, "red", this.quality.shadows);
     this.scene.add(this.player.group);
@@ -258,21 +330,27 @@ export class Game {
   showMenu(): void {
     this.setState("menu");
     this.rig.setMode("menu");
-    this.player.reset();
-    this.player.showcase(2.4);
-    this.field.clear();
-    this.particles.clear();
-    this.world.forceTheme("coastal");
-    this.applyEnvironment("coastal");
+    this.showcase();
+    // Previewed, not forced: a theme chosen in settings must survive visiting the menu.
+    const backdrop = this.world.override ?? "coastal";
+    this.world.previewTheme(backdrop);
+    this.applyEnvironment(backdrop);
   }
 
   showGarage(): void {
     this.setState("garage");
     this.rig.setMode("garage");
+    this.showcase();
+  }
+
+  /** Parks the car on the plinth for the menu and garage. */
+  private showcase(): void {
     this.player.reset();
-    this.player.showcase(2.4);
+    this.player.showcase(SHOWCASE_X);
     this.field.clear();
     this.particles.clear();
+    this.plinth.position.x = SHOWCASE_X;
+    this.plinth.visible = true;
   }
 
   startRun(): void {
@@ -293,8 +371,9 @@ export class Game {
     this.director.reset();
     this.player.reset();
     this.player.applySkin(this.selectedSkin);
+    this.plinth.visible = false;
     this.world.resetThemes();
-    this.applyEnvironment("coastal");
+    this.applyEnvironment(this.world.dominantTheme);
     this.rig.snapToChase(this.player.x);
     this.previousX = this.player.x;
   }
@@ -387,6 +466,9 @@ export class Game {
     this.shadows.begin();
 
     this.player.update(dt, this.speed, this.wheels);
+    // Airborne, the projected shadow becomes a hard slab detached from the car, so the soft
+    // contact blob takes over entirely.
+    this.player.setShadow(this.quality.shadows && !this.player.airborne);
     // Player contact shadow shrinks and fades while airborne.
     const lift = THREE.MathUtils.clamp(this.player.y / 2.5, 0, 1);
     this.shadows.push(this.player.x, 0, 3.2 * (1 - lift * 0.45), 6.0 * (1 - lift * 0.4), 1);
@@ -405,6 +487,11 @@ export class Game {
     this.applyEnvironment(this.world.dominantTheme);
     this.renderer.toneMappingExposure = this.world.theme.exposure;
     this.shadows.setOpacity(0.42 * (1 - this.world.theme.nightFactor * 0.55));
+
+    const night = this.world.nightFactor;
+    this.headlights.position.set(this.player.x, 0.05, -14);
+    (this.headlights.material as THREE.MeshBasicMaterial).opacity = night * 0.36;
+    this.headlights.visible = night > 0.02;
 
     this.rig.update(
       dt,

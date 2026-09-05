@@ -19,6 +19,12 @@ interface PropDef {
   minScale: number;
   maxScale: number;
   capacity: number;
+  /**
+   * Radius of the soft dark patch laid under the prop, in the prop's own units. Without one a
+   * prop reads as hovering, because the roadside terrain takes no real shadows. Omit for props
+   * so large or so distant that the patch would never be visible.
+   */
+  contact?: number;
 }
 
 interface Slot {
@@ -53,6 +59,7 @@ export class Scenery {
   private readonly counts: number[] = [];
   private readonly slots: Slot[] = [];
   private readonly span: number;
+  private contactMaterial: THREE.Material | null = null;
   private mix: PropMix = [];
   private mixTotal = 0;
   private density = 1;
@@ -96,6 +103,12 @@ export class Scenery {
   }
 
   private add(def: PropDef): void {
+    if (def.contact && this.contactMaterial) {
+      const patch = new THREE.PlaneGeometry(def.contact * 2, def.contact * 2);
+      patch.rotateX(-Math.PI / 2);
+      patch.translate(0, 0.02, 0);
+      def.parts = [...def.parts, { geometry: patch, material: this.contactMaterial }];
+    }
     this.defs.push(def);
   }
 
@@ -104,6 +117,7 @@ export class Scenery {
   }
 
   private registerProps(m: Materials): void {
+    this.contactMaterial = m.contactShadow;
     // --- Palm: curved trunk with a crown of drooping fronds.
     {
       // Trunk leans gently and tapers; the lean is baked in so instances stay one draw call.
@@ -147,6 +161,7 @@ export class Scenery {
       })());
       this.add({
         name: "palm",
+        contact: 1.15,
         parts: [
           { geometry: trunk.build().get("t")!, material: m.trunk },
           { geometry: fronds.build().get("f")!, material: m.leaf },
@@ -173,6 +188,7 @@ export class Scenery {
       }
       this.add({
         name: "pine",
+        contact: 1.7,
         parts: [
           { geometry: trunk, material: m.trunk },
           { geometry: canopy.build().get("c")!, material: m.leaf },
@@ -198,6 +214,7 @@ export class Scenery {
       }
       this.add({
         name: "bush",
+        contact: 1.35,
         parts: [{ geometry: bush.build().get("b")!, material: m.leaf }],
         minLateral: 1,
         maxLateral: 22,
@@ -214,11 +231,12 @@ export class Scenery {
       rock.translate(0, 0.6, 0);
       this.add({
         name: "rock",
+        contact: 1.5,
         parts: [{ geometry: rock, material: m.rock }],
-        minLateral: 2,
-        maxLateral: 28,
-        minScale: 0.7,
-        maxScale: 2.4,
+        minLateral: 5,
+        maxLateral: 34,
+        minScale: 0.55,
+        maxScale: 1.15,
         capacity: 30,
       });
     }
@@ -246,6 +264,7 @@ export class Scenery {
       }
       this.add({
         name: "cactus",
+        contact: 1.0,
         parts: [{ geometry: cactus.build().get("c")!, material: m.leaf }],
         minLateral: 2,
         maxLateral: 24,
@@ -341,6 +360,7 @@ export class Scenery {
       })());
       this.add({
         name: "neonSign",
+        contact: 0.6,
         parts: [
           { geometry: mast, material: m.darkMetal },
           { geometry: frame.build().get("n")!, material: m.neon },
@@ -363,6 +383,7 @@ export class Scenery {
       trim.translate(0, 8.35, 0);
       this.add({
         name: "billboard",
+        contact: 0.8,
         parts: [
           { geometry: posts.build().get("p")!, material: m.darkMetal },
           { geometry: face, material: m.signWarning },

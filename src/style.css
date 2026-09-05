@@ -178,6 +178,18 @@ body {
   color: var(--ink-dim);
 }
 
+.hud__chip {
+  margin-top: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 14, 24, 0.5);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
 .hud__speed {
   display: flex;
   flex-direction: column;
@@ -651,6 +663,13 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/* Four-way choices need their own line so they cannot overflow the panel. */
+.setting--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
 .setting__label {
   font-size: 13px;
   letter-spacing: 0.06em;
@@ -661,6 +680,11 @@ body {
   border-radius: 11px;
   overflow: hidden;
   border: 1px solid var(--panel-line);
+}
+
+.setting--stacked .segmented button {
+  flex: 1;
+  padding: 9px 4px;
 }
 
 .segmented button {

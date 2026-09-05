@@ -40,6 +40,7 @@ export class Materials {
   readonly asphaltNormal: THREE.Texture;
   readonly windowMap: THREE.Texture;
   readonly glow: THREE.Texture;
+  readonly contactShadow: THREE.MeshBasicMaterial;
   readonly streak: THREE.Texture;
   readonly foliage: THREE.Texture;
 
@@ -172,10 +173,12 @@ export class Materials {
     this.coneStripe = std({ color: 0xf3f3f0, roughness: 0.62, metalness: 0.02 });
     this.barrierBody = std({ color: 0xe6e2d9, roughness: 0.76, metalness: 0.03 });
     this.barrierStripe = std({ color: 0xef5a1e, roughness: 0.72, metalness: 0.03 });
+    // Emissive enough to read at distance, but dim enough that the rim and emboss still catch
+    // a highlight instead of flattening into a plain orange circle up close.
     this.coin = emissive(
-      { color: 0xffc733, emissive: 0xffa000, roughness: 0.2, metalness: 1, envMapIntensity: 1.6 },
-      0.35,
-      0.7,
+      { color: 0xffcf45, emissive: 0xff9c00, roughness: 0.16, metalness: 1, envMapIntensity: 2.1 },
+      0.14,
+      0.55,
     );
 
     this.glass =
@@ -246,6 +249,19 @@ export class Materials {
       { color: 0x2a2a26, emissive: 0xffe6b0, roughness: 0.3, metalness: 0.2 },
       0.1,
       2.6,
+    );
+
+    // Soft dark patch laid flat under roadside props. Without it nothing reads as touching the
+    // ground and every rock and bush looks pasted onto the terrain.
+    this.contactShadow = track(
+      new THREE.MeshBasicMaterial({
+        map: this.glow,
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false,
+        fog: true,
+      }),
     );
 
     this.additiveWhite = track(

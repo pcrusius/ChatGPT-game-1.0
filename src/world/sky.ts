@@ -21,6 +21,7 @@ uniform vec3 uHorizon;
 uniform vec3 uGround;
 uniform vec3 uSunColor;
 uniform vec3 uSunDir;
+/** Angular radius of the sun disc, in radians. */
 uniform float uSunSize;
 uniform float uHalo;
 uniform float uStars;
@@ -44,11 +45,13 @@ void main() {
   vec3 col = mix(uHorizon, uTop, pow(up, 0.72));
   col = mix(col, uGround, down);
 
-  // Sun disc plus a wide atmospheric halo that grounds it in the gradient.
+  // Sun disc plus a wide atmospheric halo that grounds it in the gradient. Working in angle
+  // rather than in the dot product keeps the disc the size it claims to be.
   float sun = max(dot(dir, normalize(uSunDir)), 0.0);
-  float disc = smoothstep(1.0 - uSunSize, 1.0 - uSunSize * 0.35, sun);
-  float halo = (pow(sun, 26.0) * 0.6 + pow(sun, 5.0) * 0.14) * uHalo;
-  col += uSunColor * (disc * 1.6 + halo);
+  float angle = acos(min(sun, 1.0));
+  float disc = 1.0 - smoothstep(uSunSize * 0.82, uSunSize * 1.18, angle);
+  float halo = (pow(sun, 900.0) * 0.5 + pow(sun, 90.0) * 0.2 + pow(sun, 8.0) * 0.09) * uHalo;
+  col += uSunColor * (disc * 0.95 + halo);
 
   if (uStars > 0.001) {
     col += vec3(0.85, 0.9, 1.0) * stars(dir) * uStars * smoothstep(-0.02, 0.35, h);
@@ -75,7 +78,7 @@ export class Sky {
         uGround: { value: new THREE.Color(0x9fc4d8) },
         uSunColor: { value: new THREE.Color(0xfff6d8) },
         uSunDir: { value: new THREE.Vector3(0, 1, -1).normalize() },
-        uSunSize: { value: 0.03 },
+        uSunSize: { value: 0.05 },
         uHalo: { value: 1 },
         uStars: { value: 0 },
       },

@@ -159,10 +159,18 @@ export class World {
     this.sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
     this.sun.shadow.bias = -0.0009;
     this.sun.shadow.normalBias = 0.035;
+    this.sun.shadow.radius = 3;
+    // A full-strength cast shadow reads as a hard black cut-out in this art style; the soft
+    // contact blobs under each vehicle do most of the grounding work.
+    this.sun.shadow.intensity = 0.62;
   }
 
   resetThemes(): void {
-    this.themeOverride = null;
+    // A theme picked in settings is a deliberate choice and outlives a run.
+    if (this.themeOverride) {
+      this.forceTheme(this.themeOverride);
+      return;
+    }
     this.themeIndex = 0;
     this.blendT = 0;
     this.activeThemeId = THEME_ORDER[0];
@@ -172,14 +180,23 @@ export class World {
   }
 
   /** Jumps straight to a theme; used by the menu and by debug/testing hooks. */
-  forceTheme(id: ThemeId): void {
+  /** Shows a theme without committing to it, for the menu and garage backdrops. */
+  previewTheme(id: ThemeId): void {
     this.themeIndex = THEME_ORDER.indexOf(id);
     this.blendT = 0;
     this.activeThemeId = id;
     this.scenery.setMix(THEMES[id].props);
     this.scenery.assignAll();
     this.applyBlend(0);
+  }
+
+  forceTheme(id: ThemeId): void {
+    this.previewTheme(id);
     this.themeOverride = id;
+  }
+
+  get override(): ThemeId | null {
+    return this.themeOverride;
   }
 
   get currentThemeName(): string {
@@ -187,6 +204,11 @@ export class World {
   }
 
   /** Theme currently contributing most of the look; drives which env map is bound. */
+  /** 0 in full daylight, 1 at night. Drives headlights and other after-dark effects. */
+  get nightFactor(): number {
+    return this.theme.nightFactor;
+  }
+
   get dominantTheme(): ThemeId {
     return this.activeThemeId;
   }

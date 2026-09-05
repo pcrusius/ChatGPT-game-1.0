@@ -209,31 +209,49 @@ export class Road {
     );
     this.reflectors.addTo(this.group);
 
-    // Street lighting: mast, curved arm and a lamp head that glows after dark.
+    // Street lighting: mast, a solid boom and a luminaire with a lit lens. The boom has to read
+    // as a boom against a bright sky, otherwise the head looks like a slab floating in the air.
     const lampParts = new PartBuilder<"pole" | "head">();
     lampParts.add("pole", (() => {
-      const base = taperedBox(0.32, 0.24, 0.5, 0.32, 0.24);
-      base.translate(0, 0.25, 0);
+      const base = taperedBox(0.34, 0.26, 0.55, 0.34, 0.26);
+      base.translate(0, 0.27, 0);
       return base;
     })());
     lampParts.add("pole", (() => {
-      const mast = taperedBox(0.19, 0.13, 7.2, 0.19, 0.13);
-      mast.translate(0, 3.7, 0);
+      const mast = taperedBox(0.2, 0.13, 6.7, 0.2, 0.13);
+      mast.translate(0, 3.45, 0);
       return mast;
     })());
-    for (let i = 0; i < 5; i++) {
-      const t = i / 4;
+    const BOOM_SEGMENTS = 4;
+    const BOOM_REACH = 2.0;
+    for (let i = 0; i < BOOM_SEGMENTS; i++) {
+      const t = i / BOOM_SEGMENTS;
+      const next = (i + 1) / BOOM_SEGMENTS;
       lampParts.add("pole", (() => {
-        const arm = tubeX(0.075, 0.62);
-        arm.rotateZ(-0.5 + t * 0.5);
-        arm.translate(-0.28 - t * 0.56, 7.28 + Math.sin(t * 1.2) * 0.34, 0);
-        return arm;
+        // Each segment spans one step of a quarter-circle sweep from vertical to horizontal.
+        const x0 = -BOOM_REACH * (1 - Math.cos(t * Math.PI * 0.5));
+        const x1 = -BOOM_REACH * (1 - Math.cos(next * Math.PI * 0.5));
+        const y0 = 6.8 + 0.62 * Math.sin(t * Math.PI * 0.5);
+        const y1 = 6.8 + 0.62 * Math.sin(next * Math.PI * 0.5);
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const length = Math.hypot(dx, dy);
+        const width = 0.17 - t * 0.045;
+        const seg = taperedBox(width, width * 0.92, length + 0.03, width, width * 0.92);
+        seg.rotateZ(Math.atan2(dy, dx) - Math.PI / 2);
+        seg.translate((x0 + x1) / 2, (y0 + y1) / 2, 0);
+        return seg;
       })());
     }
+    lampParts.add("pole", (() => {
+      const housing = taperedBox(0.46, 0.34, 0.2, 0.92, 0.66);
+      housing.translate(-BOOM_REACH - 0.34, 7.36, 0);
+      return housing;
+    })());
     lampParts.add("head", (() => {
-      const head = taperedBox(0.5, 0.36, 0.16, 0.9, 0.6);
-      head.translate(-2.5, 7.42, 0);
-      return head;
+      const lens = taperedBox(0.34, 0.26, 0.07, 0.74, 0.54);
+      lens.translate(-BOOM_REACH - 0.34, 7.23, 0);
+      return lens;
     })());
     const lampGeo = lampParts.build();
     this.lamps = new StripField(

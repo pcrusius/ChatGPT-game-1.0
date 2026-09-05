@@ -23,6 +23,11 @@ export const JUMP_HEIGHT = 2.5;
 
 export const SPAWN_DISTANCE = 205;
 export const DESPAWN_Z = 22;
+/**
+ * Coins float at roughly camera height, so an uncollected one flying past the chase camera
+ * fills the screen with gold. They are retired as soon as they are behind the car instead.
+ */
+export const COIN_DESPAWN_Z = 3;
 
 export const PLAYER_HALF_WIDTH = 0.95;
 export const PLAYER_HALF_LENGTH = 2.05;

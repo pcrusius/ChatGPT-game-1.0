@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DESPAWN_Z, TRAFFIC_COLORS } from "./config";
+import { COIN_DESPAWN_Z, DESPAWN_Z, TRAFFIC_COLORS } from "./config";
 import { PartBuilder, roundedBox, taperedBox, tubeZ } from "../render/geom";
 import type { Materials } from "../render/materials";
 import { WheelSystem, vehicleModels, type VehicleKind } from "../render/vehicles";
@@ -223,12 +223,12 @@ export class EntityField {
       new InstancedSet("coin", [{ geometry: coinParts.build().get("c")!, material: materials.coin }], 64),
     );
 
-    const glowGeo = new THREE.PlaneGeometry(1.9, 1.9);
+    const glowGeo = new THREE.PlaneGeometry(1.35, 1.35);
     const glowMaterial = new THREE.MeshBasicMaterial({
       map: materials.glow,
       color: 0xffc84a,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.42,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       fog: true,
@@ -599,7 +599,7 @@ export class EntityField {
     for (const entity of this.entities) {
       if (!entity.active) continue;
       entity.z += scroll - entity.speed * dt;
-      if (entity.z > DESPAWN_Z) {
+      if (entity.z > (entity.role === "coin" ? COIN_DESPAWN_Z : DESPAWN_Z)) {
         entity.active = false;
         continue;
       }
@@ -624,10 +624,13 @@ export class EntityField {
       const x = entity.x + entity.laneDrift;
 
       if (entity.role === "coin") {
-        const pop = entity.collectT >= 0 ? 1 + entity.collectT * 1.5 : 1;
-        const lift = entity.collectT >= 0 ? entity.collectT * 1.4 : 0;
+        // Collection flicks the coin up, swells it briefly and collapses it to nothing, so it
+        // can never linger on screen as an oversized slab of gold.
+        const t = entity.collectT;
+        const pop = t >= 0 ? (1 + t * 1.1) * (1 - t * t) : 1;
+        const lift = t >= 0 ? t * 1.4 : 0;
         set.push(x, entity.y + lift, entity.z, entity.spin, pop, WHITE);
-        this.coinGlow.push(x, entity.y + lift, entity.z - 0.05, 0, pop * 1.1, WHITE);
+        this.coinGlow.push(x, entity.y + lift, entity.z - 0.05, 0, pop * 1.3, WHITE);
         continue;
       }
 
