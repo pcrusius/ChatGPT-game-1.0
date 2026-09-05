@@ -20,21 +20,21 @@ export class ChaseCamera {
     this.shake = Math.max(this.shake, amount);
   }
 
-  menu(carX: number, dt: number): void {
-    this.ideal.set(carX * 0.35 - 2.8, 3.4, 6.4);
+  menu(dt: number): void {
+    this.ideal.set(-5.0, 2.5, 7.0);
     this.camera.position.lerp(this.ideal, 1 - Math.exp(-dt * 2.4));
-    this.look.set(carX * 0.4, 0.7, -4);
+    this.look.set(-2.2, 1.0, -1.5);
     this.camera.lookAt(this.look);
-    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 52, 0.08);
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 50, 0.08);
     this.camera.updateProjectionMatrix();
   }
 
   garage(dt: number): void {
-    this.ideal.set(3.4, 1.7, 5.2);
+    this.ideal.set(4.4, 1.9, 5.6);
     this.camera.position.lerp(this.ideal, 1 - Math.exp(-dt * 3));
-    this.look.set(0, 0.7, 0);
+    this.look.set(-1.4, 0.95, 0.4);
     this.camera.lookAt(this.look);
-    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 42, 0.1);
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 44, 0.1);
     this.camera.updateProjectionMatrix();
   }
 

@@ -95,6 +95,20 @@ body,
   pointer-events: none;
 }
 
+/* Keeps the hero car clear of the panel on the start and garage screens. */
+.overlay--left {
+  justify-content: flex-start;
+  padding-left: max(24px, 7vw);
+  background: linear-gradient(100deg, rgba(4, 8, 16, 0.68) 0%, rgba(4, 8, 16, 0.34) 46%, rgba(4, 8, 16, 0.05) 72%);
+}
+
+@media (max-width: 900px) {
+  .overlay--left {
+    justify-content: center;
+    padding-left: 0;
+  }
+}
+
 .overlay-card {
   pointer-events: auto;
   width: min(560px, calc(100vw - 32px));

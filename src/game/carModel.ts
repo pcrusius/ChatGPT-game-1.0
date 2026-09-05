@@ -36,16 +36,54 @@ function bodyProfile(): THREE.Shape {
   return s;
 }
 
-/** Greenhouse (glass cabin) profile. */
-function cabinProfile(): THREE.Shape {
-  const s = new THREE.Shape();
-  s.moveTo(-0.34, 0.76);
-  s.quadraticCurveTo(0.0, 1.12, 0.26, 1.19);
-  s.lineTo(0.82, 1.2);
-  s.quadraticCurveTo(1.24, 1.16, 1.58, 0.86);
-  s.lineTo(1.62, 0.76);
-  s.closePath();
-  return s;
+/**
+ * Greenhouse built as a tapered box: narrower and shorter at the roof, with raked front and
+ * rear glass. A straight extrusion here reads as a slab bolted to the deck.
+ */
+function greenhouse(inflate: number, withRoof: boolean): THREE.BufferGeometry {
+  const bw = 1.44 / 2 + inflate;
+  const tw = 1.02 / 2 + inflate;
+  const yBottom = 0.76 - inflate;
+  const yTop = 1.34 + (withRoof ? 0 : -0.008);
+  const zFront = -0.38 - inflate;
+  const zRear = 1.5 + inflate;
+  const zft = zFront + 0.78;
+  const zrt = zRear - 0.56;
+
+  const v = [
+    [-bw, yBottom, zFront],
+    [bw, yBottom, zFront],
+    [bw, yBottom, zRear],
+    [-bw, yBottom, zRear],
+    [-tw, yTop, zft],
+    [tw, yTop, zft],
+    [tw, yTop, zrt],
+    [-tw, yTop, zrt],
+  ];
+
+  const faces: number[][] = [
+    [0, 1, 5],
+    [0, 5, 4], // windshield
+    [3, 7, 6],
+    [3, 6, 2], // rear glass
+    [1, 2, 6],
+    [1, 6, 5], // right side
+    [0, 4, 7],
+    [0, 7, 3], // left side
+  ];
+  if (withRoof) {
+    faces.push([4, 5, 6], [4, 6, 7]);
+  }
+
+  const positions: number[] = [];
+  for (const face of faces) {
+    for (const index of face) positions.push(...v[index]);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
 }
 
 function extrude(shape: THREE.Shape, width: number, bevel: number): THREE.BufferGeometry {
@@ -139,14 +177,12 @@ export function createSportsCar(colors: CarColors, compact = false): THREE.Group
   stripe.userData.role = "stripe";
 
   const glass = new THREE.MeshPhysicalMaterial({
-    color: 0x121a24,
-    metalness: 0.2,
-    roughness: 0.06,
-    transmission: 0.55,
-    thickness: 0.4,
-    transparent: true,
-    opacity: 0.82,
-    envMapIntensity: 2,
+    color: 0x0e151f,
+    metalness: 0.1,
+    roughness: 0.04,
+    clearcoat: 1,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 2.8,
   });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x101216, roughness: 0.85, metalness: 0.1 });
   const chrome = new THREE.MeshStandardMaterial({
@@ -175,114 +211,101 @@ export function createSportsCar(colors: CarColors, compact = false): THREE.Group
     return mesh;
   };
 
-  // Body is deliberately narrower than the track so the wheels and arches stay visible.
-  const body = new THREE.Mesh(extrude(bodyProfile(), 1.44, 0.09), paint);
+  const body = new THREE.Mesh(extrude(bodyProfile(), 1.62, 0.09), paint);
   add(body);
 
-  // The greenhouse is solid paint with separate glazing panels; a fully glass cabin reads
-  // as an open cockpit from the chase camera.
-  const cabin = new THREE.Mesh(extrude(cabinProfile(), 1.24, 0.05), paint);
+  // Solid body-coloured cabin with a marginally larger opaque glazing shell over its sides.
+  // Transmissive glass disappears against the sky and makes the car look like a roadster.
+  const cabin = new THREE.Mesh(greenhouse(0, true), paint);
   add(cabin);
 
-  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.58, 0.05), glass);
-  windshield.position.set(0, 0.99, -0.09);
-  windshield.rotation.x = -0.95;
-  add(windshield, false);
+  const glazing = new THREE.Mesh(greenhouse(0.012, false), glass);
+  add(glazing, false);
 
-  const rearGlass = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.52, 0.05), glass);
-  rearGlass.position.set(0, 1.04, 1.24);
-  rearGlass.rotation.x = 1.14;
-  add(rearGlass, false);
-
-  for (const x of [-0.69, 0.69]) {
-    const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.92), glass);
-    sideGlass.position.set(x, 1.0, 0.56);
-    add(sideGlass, false);
-  }
-
-  const roofStripe = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 0.7), stripe);
-  roofStripe.position.set(0, 1.25, 0.53);
+  const roofStripe = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.72), stripe);
+  roofStripe.position.set(0, 1.35, 0.68);
   add(roofStripe, false);
 
   const hoodStripe = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 1.4), stripe);
-  hoodStripe.position.set(0, 0.74, -1.32);
+  hoodStripe.position.set(0, 0.72, -1.34);
   add(hoodStripe, false);
 
   const deckStripe = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 0.5), stripe);
-  deckStripe.position.set(0, 0.91, 1.72);
+  deckStripe.position.set(0, 0.88, 1.74);
   add(deckStripe, false);
 
   // Sills, splitter and diffuser.
-  for (const x of [-0.8, 0.8]) {
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.18, 2.2), accent);
-    sill.position.set(x, 0.3, 0.1);
+  for (const x of [-0.88, 0.88]) {
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.17, 2.2), accent);
+    sill.position.set(x, 0.29, 0.1);
     add(sill);
   }
 
-  const splitter = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.07, 0.42), accent);
-  splitter.position.set(0, 0.21, -2.14);
+  const splitter = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.07, 0.42), accent);
+  splitter.position.set(0, 0.2, -2.14);
   add(splitter);
 
-  const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.24, 0.36), accent);
-  diffuser.position.set(0, 0.29, 2.12);
+  const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.22, 0.34), accent);
+  diffuser.position.set(0, 0.28, 2.12);
   add(diffuser);
-  for (let i = 0; i < 4; i++) {
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.2, 0.34), rubber);
-    fin.position.set(-0.51 + i * 0.34, 0.29, 2.14);
+  for (const x of [-0.44, 0, 0.44]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.32), rubber);
+    fin.position.set(x, 0.28, 2.14);
     add(fin, false);
   }
 
-  // Rear fascia with a light bar.
-  const fascia = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.1), accent);
-  fascia.position.set(0, 0.62, 2.22);
+  // Rear fascia with a light bar. Lamps have to clear the extruded body or they end up
+  // buried inside it and never show.
+  const fascia = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.28, 0.1), accent);
+  fascia.position.set(0, 0.6, 2.26);
   add(fascia, false);
 
-  for (const x of [-0.46, 0.46]) {
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.14, 0.07), tailMat);
-    lamp.position.set(x, 0.66, 2.26);
+  for (const x of [-0.52, 0.52]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.08), tailMat);
+    lamp.position.set(x, 0.64, 2.31);
     add(lamp, false);
   }
-  const centreBar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.06), tailMat);
-  centreBar.position.set(0, 0.66, 2.26);
+  const centreBar = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.07), tailMat);
+  centreBar.position.set(0, 0.64, 2.31);
   add(centreBar, false);
 
   // Ducktail spoiler.
-  for (const x of [-0.55, 0.55]) {
-    const stand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.1), accent);
-    stand.position.set(x, 0.98, 1.88);
+  for (const x of [-0.6, 0.6]) {
+    const stand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.19, 0.1), accent);
+    stand.position.set(x, 0.95, 1.9);
     add(stand);
   }
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.07, 0.36), paint);
-  wing.position.set(0, 1.09, 1.88);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.07, 0.36), paint);
+  wing.position.set(0, 1.05, 1.9);
   wing.rotation.x = -0.1;
   add(wing);
 
   // Front end.
   for (const x of [-0.6, 0.6]) {
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.13, 0.1), headMat);
-    lamp.position.set(x, 0.6, -2.2);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.1), headMat);
+    lamp.position.set(x, 0.58, -2.29);
     lamp.rotation.x = 0.12;
     add(lamp, false);
   }
   const grille = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.18, 0.08), rubber);
-  grille.position.set(0, 0.4, -2.24);
+  grille.position.set(0, 0.4, -2.3);
   add(grille, false);
   for (const x of [-0.66, 0.66]) {
     const intake = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.08), rubber);
-    intake.position.set(x, 0.36, -2.2);
+    intake.position.set(x, 0.36, -2.3);
     add(intake, false);
   }
 
-  for (const x of [-0.88, 0.88]) {
+  for (const x of [-0.98, 0.98]) {
     const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.13), paint);
-    mirror.position.set(x, 0.87, -0.26);
+    mirror.position.set(x, 0.86, -0.26);
     add(mirror);
-    const stalk = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.05), accent);
-    stalk.position.set(x * 0.84, 0.85, -0.26);
+    const stalk = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.05), accent);
+    stalk.position.set(x * 0.86, 0.84, -0.26);
     add(stalk, false);
   }
 
-  for (const x of [-0.3, 0.3]) {
+  for (const x of [-0.32, 0.32]) {
     const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.2, 12), chrome);
     pipe.rotation.x = Math.PI / 2;
     pipe.position.set(x, 0.34, 2.3);
@@ -291,12 +314,12 @@ export function createSportsCar(colors: CarColors, compact = false): THREE.Group
 
   // Wheels sit slightly proud of the body and get arches so they read from behind.
   const wheels: THREE.Group[] = [];
-  const archGeo = new THREE.TorusGeometry(0.5, 0.1, 8, 18, Math.PI);
+  const archGeo = new THREE.TorusGeometry(0.51, 0.1, 8, 18, Math.PI);
   for (const [x, z] of [
-    [-0.86, -1.32],
-    [0.86, -1.32],
-    [-0.86, 1.36],
-    [0.86, 1.36],
+    [-0.94, -1.34],
+    [0.94, -1.34],
+    [-0.94, 1.38],
+    [0.94, 1.38],
   ] as [number, number][]) {
     const wheel = makeWheel();
     wheel.position.set(x, 0.38, z);
@@ -304,7 +327,7 @@ export function createSportsCar(colors: CarColors, compact = false): THREE.Group
     wheels.push(wheel);
 
     const arch = new THREE.Mesh(archGeo, paint);
-    arch.position.set(x * 0.93, 0.38, z);
+    arch.position.set(x * 0.94, 0.38, z);
     arch.rotation.y = Math.PI / 2;
     arch.castShadow = true;
     car.add(arch);

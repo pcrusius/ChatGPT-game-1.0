@@ -246,8 +246,8 @@ export class Game {
         this.player.mesh.rotation.y = this.menuSpin * 0.55;
         this.rig.garage(dt);
       } else {
-        this.player.mesh.rotation.y = Math.sin(this.menuSpin * 0.4) * 0.35;
-        this.rig.menu(this.player.x, dt);
+        this.player.mesh.rotation.y = Math.sin(this.menuSpin * 0.35) * 0.3;
+        this.rig.menu(dt);
       }
     }
 
