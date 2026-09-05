@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { JUMP_HEIGHT, LANE_COUNT, LANE_CHANGE_TIME, JUMP_DURATION, laneX } from "./config";
+import { JUMP_HEIGHT, LANE_COUNT, LANE_CHANGE_TIME, LANE_WIDTH, JUMP_DURATION, laneX } from "./config";
 import { applyCarColors, createSportsCar, getSkinColors } from "./carModel";
 import type { SkinId } from "./config";
 
@@ -89,7 +89,8 @@ export class Player {
       }
     }
 
-    const lean = (this.toX - this.fromX) * (this.laneT < 1 ? (1 - this.laneT) * 0.22 : 0);
+    const lateral = this.laneT < 1 ? (this.toX - this.fromX) / LANE_WIDTH : 0;
+    const lean = lateral * Math.sin(this.laneT * Math.PI) * 0.16;
     const pitch = this.jumping ? (0.5 - this.jumpT / JUMP_DURATION) * 0.28 : 0;
     this.mesh.position.set(this.x, this.y, 0);
     this.mesh.rotation.set(pitch, 0, -lean);

@@ -4,23 +4,29 @@ import { LANE_WIDTH, ROAD_WIDTH, SHOULDER_WIDTH } from "./config";
 const ROAD_LENGTH = 900;
 const ROAD_CENTER_Z = -ROAD_LENGTH / 2 + 60;
 
-export const SKY_TOP = 0x0b1f3f;
-export const SKY_MID = 0x2f6fae;
-export const HORIZON = 0xe6b98a;
-export const FOG_COLOR = 0xc8b49c;
+export const FOG_COLOR = 0xcfe1f0;
 
+/**
+ * Equirectangular sky: v=0 is the zenith and v=0.5 is the horizon, so the haze band has to
+ * sit at the middle of the gradient for it to line up with the fog.
+ */
 function makeSkyTexture(): THREE.Texture {
   const canvas = document.createElement("canvas");
-  canvas.width = 8;
-  canvas.height = 256;
+  canvas.width = 16;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, `#${SKY_TOP.toString(16).padStart(6, "0")}`);
-  grad.addColorStop(0.45, `#${SKY_MID.toString(16).padStart(6, "0")}`);
-  grad.addColorStop(0.78, "#8fb4d6");
-  grad.addColorStop(1, `#${HORIZON.toString(16).padStart(6, "0")}`);
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, "#0a2350");
+  grad.addColorStop(0.22, "#1c4c8f");
+  grad.addColorStop(0.38, "#4a8ac8");
+  grad.addColorStop(0.47, "#9dc4e4");
+  grad.addColorStop(0.5, "#cfe1f0");
+  grad.addColorStop(0.54, "#c2d3de");
+  grad.addColorStop(0.72, "#7c8f7a");
+  grad.addColorStop(1, "#43502f");
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 8, 256);
+  ctx.fillRect(0, 0, 16, 512);
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -33,12 +39,12 @@ function makeAsphaltTexture(): THREE.Texture {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#2b2d33";
+  ctx.fillStyle = "#494c54";
   ctx.fillRect(0, 0, size, size);
 
   const image = ctx.getImageData(0, 0, size, size);
   for (let i = 0; i < image.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 34;
+    const n = (Math.random() - 0.5) * 26;
     image.data[i] = Math.max(0, Math.min(255, image.data[i] + n));
     image.data[i + 1] = Math.max(0, Math.min(255, image.data[i + 1] + n));
     image.data[i + 2] = Math.max(0, Math.min(255, image.data[i + 2] + n));
@@ -83,33 +89,40 @@ export class World {
   private readonly propSpacing = 13;
   private readonly span = 340;
 
-  constructor(scene: THREE.Scene) {
-    scene.background = makeSkyTexture();
-    scene.fog = new THREE.Fog(FOG_COLOR, 90, 300);
+  constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
+    const sky = makeSkyTexture();
+    scene.background = sky;
+    scene.fog = new THREE.Fog(FOG_COLOR, 70, 320);
 
-    const hemi = new THREE.HemisphereLight(0xbcd8ff, 0x3a2f26, 0.85);
+    // Metal and clearcoat surfaces need something to reflect or they render nearly black.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromEquirectangular(sky).texture;
+    pmrem.dispose();
+
+    const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x53603f, 1.15);
     scene.add(hemi);
 
-    const ambient = new THREE.AmbientLight(0x8fa6c4, 0.35);
+    const ambient = new THREE.AmbientLight(0xa8bed6, 0.45);
     scene.add(ambient);
 
-    this.sunLight = new THREE.DirectionalLight(0xffd9a8, 2.1);
-    this.sunLight.position.set(-38, 52, -18);
+    // Sun sits behind and above the player so the visible rear of the car stays lit.
+    this.sunLight = new THREE.DirectionalLight(0xfff0d2, 2.2);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
     this.sunLight.shadow.camera.near = 1;
-    this.sunLight.shadow.camera.far = 180;
-    this.sunLight.shadow.camera.left = -40;
-    this.sunLight.shadow.camera.right = 40;
-    this.sunLight.shadow.camera.top = 40;
-    this.sunLight.shadow.camera.bottom = -60;
-    this.sunLight.shadow.bias = -0.0008;
+    this.sunLight.shadow.camera.far = 200;
+    this.sunLight.shadow.camera.left = -46;
+    this.sunLight.shadow.camera.right = 46;
+    this.sunLight.shadow.camera.top = 50;
+    this.sunLight.shadow.camera.bottom = -50;
+    this.sunLight.shadow.bias = -0.0009;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
+    this.followShadow(0);
 
-    const rim = new THREE.DirectionalLight(0x6fa8ff, 0.5);
-    rim.position.set(24, 18, 26);
-    scene.add(rim);
+    const fill = new THREE.DirectionalLight(0x9ec4ff, 0.55);
+    fill.position.set(30, 22, -34);
+    scene.add(fill);
 
     this.asphalt = makeAsphaltTexture();
     this.buildGround();
@@ -222,8 +235,9 @@ export class World {
     });
     const signPost = new THREE.CylinderGeometry(0.07, 0.07, 3.2, 6);
     const signGeo = new THREE.BoxGeometry(2.2, 1.2, 0.08);
-    const signMat = new THREE.MeshStandardMaterial({ color: 0x1e6b3a, roughness: 0.7 });
-    const signFace = new THREE.MeshStandardMaterial({ color: 0xe8f2e8, roughness: 0.6 });
+    const signMat = new THREE.MeshStandardMaterial({ color: 0x18653a, roughness: 0.7 });
+    const legendGeo = new THREE.BoxGeometry(1.5, 0.16, 0.04);
+    const legendMat = new THREE.MeshStandardMaterial({ color: 0xeef4ee, roughness: 0.55 });
 
     const count = Math.ceil(this.span / this.lampSpacing);
     for (let i = 0; i < count * 2; i++) {
@@ -248,10 +262,16 @@ export class World {
         const sp = new THREE.Mesh(signPost, poleMat);
         sp.position.set(-dir * 0.9, 1.6, 2.5);
         unit.add(sp);
-        const board = new THREE.Mesh(signGeo, [signMat, signMat, signMat, signMat, signFace, signMat]);
+        const board = new THREE.Mesh(signGeo, signMat);
         board.position.set(-dir * 0.9, 3.4, 2.5);
         board.castShadow = true;
         unit.add(board);
+        for (let line = 0; line < 2; line++) {
+          const legend = new THREE.Mesh(legendGeo, legendMat);
+          legend.scale.x = line === 0 ? 1 : 0.66;
+          legend.position.set(-dir * 0.9, 3.62 - line * 0.4, 2.55);
+          unit.add(legend);
+        }
       }
 
       unit.position.set(dir * (ROAD_WIDTH / 2 + SHOULDER_WIDTH + 1.1), 0, z);
@@ -341,8 +361,8 @@ export class World {
   }
 
   followShadow(targetZ: number): void {
-    this.sunLight.position.set(-38, 52, targetZ - 18);
-    this.sunLight.target.position.set(0, 0, targetZ - 24);
+    this.sunLight.position.set(-30, 48, targetZ + 32);
+    this.sunLight.target.position.set(0, 0, targetZ - 16);
     this.sunLight.target.updateMatrixWorld();
   }
 }

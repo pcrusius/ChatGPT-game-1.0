@@ -38,6 +38,16 @@ export class ChaseCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Places the camera at its chase pose immediately so a new run does not start mid-swoop. */
+  snapToChase(): void {
+    this.shake = 0;
+    this.camera.position.set(0, 4.6, 9.2);
+    this.camera.fov = 58;
+    this.camera.updateProjectionMatrix();
+    this.look.set(0, 0.85, -12);
+    this.camera.lookAt(this.look);
+  }
+
   chase(carX: number, carY: number, speed: number, dt: number): void {
     const speedT = THREE.MathUtils.clamp((speed - 38) / 48, 0, 1);
     this.ideal.set(carX * 0.22, 4.6 + carY * 0.22, 9.2 + speedT * 1.6);

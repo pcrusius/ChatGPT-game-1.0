@@ -67,7 +67,7 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
-    this.world = new World(this.scene);
+    this.world = new World(this.scene, this.renderer);
     this.player = new Player(skin);
     this.scene.add(this.player.mesh);
     this.scene.add(this.field.group);
@@ -114,6 +114,7 @@ export class Game {
     this.previousSafeLanes = [0, 1, 2];
     this.crashTimer = 0;
     this.gameOverFired = false;
+    this.rig.snapToChase();
     this.audio.resume();
     this.hooks.onHud(0, 0, this.speed * 3.6);
   }
