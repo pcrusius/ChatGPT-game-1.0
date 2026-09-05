@@ -1,9 +1,20 @@
-import { changeDirection, createGame, step, type Direction, type GameState } from "./game";
+import {
+  changeDirection,
+  chooseDirection,
+  createGame,
+  step,
+  type Direction,
+  type GameState,
+} from "./game";
 import "./style.css";
 
 const COLS = 20;
 const ROWS = 20;
 const TICK_MS = 110;
+
+// Opt-in attract/demo mode (http://localhost:5173/?demo=1): the snake autopilots
+// toward the food so the full game loop can be demonstrated hands-free.
+const DEMO = new URLSearchParams(window.location.search).has("demo");
 
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -34,10 +45,10 @@ const KEY_TO_DIR: Record<string, Direction> = {
 
 function reset(): void {
   state = createGame(COLS, ROWS);
-  started = false;
+  started = DEMO;
   paused = false;
   lastTick = 0;
-  setStatus("Press an arrow key or WASD to start", false);
+  setStatus(DEMO ? "Demo mode — autopilot" : "Press an arrow key or WASD to start", false);
   render();
 }
 
@@ -85,10 +96,17 @@ function loop(timestamp: number): void {
     return;
   }
   lastTick = timestamp;
+  if (DEMO) {
+    changeDirection(state, chooseDirection(state));
+  }
   step(state);
   if (state.gameOver) {
     best = Math.max(best, state.score);
     setStatus(`Game over! Score ${state.score}. Press R to restart.`, true);
+    if (DEMO) {
+      // Keep the attract loop going.
+      setTimeout(reset, 1200);
+    }
   }
   render();
 }

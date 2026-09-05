@@ -19,6 +19,10 @@ npm run dev       # start the dev server at http://localhost:5173
 Open the printed URL in a browser and use the **arrow keys** or **WASD** to move.
 Press **Space** to pause and **R** to restart.
 
+Append `?demo=1` to the URL (e.g. `http://localhost:5173/?demo=1`) to enable a
+hands-free **autopilot/attract mode** that steers the snake toward the food
+automatically — handy for quickly verifying the game loop end to end.
+
 ## Scripts
 
 | Command | Description |

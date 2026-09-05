@@ -20,6 +20,8 @@ export default [
         document: "readonly",
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
+        setTimeout: "readonly",
+        URLSearchParams: "readonly",
         console: "readonly",
         HTMLCanvasElement: "readonly",
         HTMLElement: "readonly",

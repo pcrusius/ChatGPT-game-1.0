@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   changeDirection,
+  chooseDirection,
   createGame,
   spawnFood,
   step,
@@ -106,6 +107,31 @@ describe("eating", () => {
     step(g, firstCellRng);
     expect(g.score).toBe(1);
     expect(g.snake).toHaveLength(4);
+  });
+});
+
+describe("chooseDirection (autopilot)", () => {
+  it("never picks the reverse of the current direction", () => {
+    const g = createGame(20, 20, firstCellRng);
+    // Put food directly behind the head to tempt a reversal.
+    g.food = { x: g.snake[0].x - 1, y: g.snake[0].y };
+    expect(chooseDirection(g)).not.toBe("left");
+  });
+
+  it("steers toward the food", () => {
+    const g = withoutFood(createGame(20, 20, firstCellRng));
+    // Food is straight below the head, so autopilot should turn down.
+    g.food = { x: g.snake[0].x, y: g.snake[0].y + 3 };
+    expect(chooseDirection(g)).toBe("down");
+  });
+
+  it("keeps the snake alive over a long autopilot run and scores points", () => {
+    const g = createGame(20, 20, Math.random);
+    for (let i = 0; i < 300 && !g.gameOver; i++) {
+      changeDirection(g, chooseDirection(g));
+      step(g, Math.random);
+    }
+    expect(g.score).toBeGreaterThan(0);
   });
 });
 

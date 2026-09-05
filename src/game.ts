@@ -78,6 +78,43 @@ export function spawnFood(state: GameState, rng: Rng = Math.random): Point {
   return free[Math.floor(rng() * free.length)];
 }
 
+/** Is `cell` a legal, non-fatal move target on this tick (in bounds, not into the body)? */
+function isSafe(state: GameState, cell: Point): boolean {
+  if (cell.x < 0 || cell.y < 0 || cell.x >= state.cols || cell.y >= state.rows) {
+    return false;
+  }
+  const eating = cell.x === state.food.x && cell.y === state.food.y;
+  const body = eating ? state.snake : state.snake.slice(0, -1);
+  return !body.some((p) => p.x === cell.x && p.y === cell.y);
+}
+
+/**
+ * Greedy autopilot used by the optional demo mode: from the current head, pick a
+ * non-reversing, non-fatal direction that minimizes Manhattan distance to the food.
+ * Falls back to the current direction when no safe move exists.
+ */
+export function chooseDirection(state: GameState): Direction {
+  const head = state.snake[0];
+  const candidates = (Object.keys(DELTAS) as Direction[]).filter(
+    (d) => d !== OPPOSITE[state.direction],
+  );
+  let best: Direction | null = null;
+  let bestDist = Infinity;
+  for (const dir of candidates) {
+    const delta = DELTAS[dir];
+    const cell = { x: head.x + delta.x, y: head.y + delta.y };
+    if (!isSafe(state, cell)) {
+      continue;
+    }
+    const dist = Math.abs(cell.x - state.food.x) + Math.abs(cell.y - state.food.y);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  return best ?? state.direction;
+}
+
 /**
  * Advance the simulation by one tick. Mutates and returns the state.
  * Handles direction commit, wall/self collisions, eating, and growth.
