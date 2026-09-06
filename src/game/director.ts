@@ -1,10 +1,20 @@
-import { LANE_COUNT, MAX_SPEED, SPAWN_DISTANCE, START_SPEED, laneX } from "./config";
-import type { EntityField } from "./entities";
+import { LANE_COUNT, LANE_WIDTH, MAX_SPEED, SPAWN_DISTANCE, START_SPEED, laneX } from "./config";
+import type { Entity, EntityField } from "./entities";
 import type { VehicleKind } from "../render/vehicles";
 
 const JUMPABLE = ["barrier", "hurdle", "roadblock"] as const;
 const BLOCKERS = ["barricade", "laneClosure"] as const;
 const TRAFFIC: VehicleKind[] = ["sedan", "suv", "sports", "van", "pickup"];
+
+/** Solid hazards within this many metres of each other read as one wall across the road. */
+const WALL_GAP = 16;
+/** How far into the future convergence between hazards is simulated, in seconds. */
+const SEAL_HORIZON = 9;
+const SEAL_STEP = 0.3;
+/** Hazards that have drawn level with the player can no longer block anything ahead of it. */
+const PASSED_Z = -2;
+const ALL_LANES = (1 << LANE_COUNT) - 1;
+const MAX_HAZARDS = 32;
 
 export interface DifficultyState {
   /** 0 while the run is still teaching, ramping to 1 once patterns are at full pressure. */
@@ -14,6 +24,14 @@ export interface DifficultyState {
 
 function pick<T>(list: readonly T[]): T {
   return list[Math.floor(Math.random() * list.length)];
+}
+
+function laneOf(x: number): number {
+  return Math.max(0, Math.min(LANE_COUNT - 1, Math.round(x / LANE_WIDTH) + 1));
+}
+
+function laneMask(x: number): number {
+  return 1 << laneOf(x);
 }
 
 /**
@@ -26,6 +44,14 @@ export class Director {
   private lastFreeLane = 1;
   private patternsSpawned = 0;
   private coinStreakLane = 1;
+  private playerSpeed = START_SPEED;
+
+  // Scratch buffers for the survivability check, so spawning never allocates.
+  private readonly hazardZ = new Float64Array(MAX_HAZARDS);
+  private readonly hazardClosing = new Float64Array(MAX_HAZARDS);
+  private readonly hazardLanes = new Uint8Array(MAX_HAZARDS);
+  private readonly futureZ = new Float64Array(MAX_HAZARDS);
+  private readonly inWall = new Uint8Array(MAX_HAZARDS);
 
   reset(): void {
     this.nextSpawnZ = -SPAWN_DISTANCE;
@@ -47,6 +73,7 @@ export class Director {
    * moving frame so gaps stay speed-correct.
    */
   update(scroll: number, distance: number, speed: number, field: EntityField): void {
+    this.playerSpeed = speed;
     this.nextSpawnZ += scroll;
     if (this.nextSpawnZ < -SPAWN_DISTANCE) return;
 
@@ -107,17 +134,131 @@ export class Director {
     return lane;
   }
 
+  // ------------------------------------------------------------- survivability
+
+  /**
+   * True when a solid hazard at `x`/`z` moving at `speed` would, at any point before it reaches
+   * the player, join the hazards already on the road into a wall covering every lane.
+   *
+   * A pattern that leaves a gap when it spawns can still seal the road later: static obstacles
+   * close on the player faster than slower-moving traffic does, so a barricade dropped far ahead
+   * eventually draws level with a car it was never grouped with. Every solid spawn is simulated
+   * forward against the live field, which keeps the "always one open lane" promise for good.
+   */
+  private sealsRoad(field: EntityField, x: number, z: number, speed: number): boolean {
+    let count = 0;
+    for (const entity of field.entities) {
+      if (!entity.active || entity.jumpable) continue;
+      if (entity.role !== "traffic" && entity.role !== "obstacle") continue;
+      if (count === MAX_HAZARDS - 1) break;
+      this.hazardZ[count] = entity.z;
+      this.hazardClosing[count] = this.playerSpeed - entity.speed;
+      // A car easing across lanes threatens both the lane it is in and the one it is heading for.
+      this.hazardLanes[count] =
+        laneMask(entity.x + entity.laneDrift) |
+        (entity.driftTarget !== 0 ? laneMask(entity.x + entity.driftTarget) : 0);
+      count += 1;
+    }
+
+    const candidate = count;
+    this.hazardZ[candidate] = z;
+    this.hazardClosing[candidate] = this.playerSpeed - speed;
+    this.hazardLanes[candidate] = laneMask(x);
+    count += 1;
+
+    for (let t = 0; t <= SEAL_HORIZON; t += SEAL_STEP) {
+      for (let i = 0; i < count; i++) {
+        const future = this.hazardZ[i] + this.hazardClosing[i] * t;
+        // Hazards level with the player are behind the decision point; park them out of reach
+        // so they neither block a lane nor chain two distant groups together.
+        this.futureZ[i] = future > PASSED_Z ? Number.POSITIVE_INFINITY : future;
+      }
+      if (this.futureZ[candidate] === Number.POSITIVE_INFINITY) break;
+
+      // Grow the wall outward from the candidate: anything within a wall gap of a member joins.
+      this.inWall.fill(0, 0, count);
+      this.inWall[candidate] = 1;
+      let lanes = this.hazardLanes[candidate];
+      let grew = true;
+      while (grew && lanes !== ALL_LANES) {
+        grew = false;
+        for (let i = 0; i < count; i++) {
+          if (this.inWall[i] || this.futureZ[i] === Number.POSITIVE_INFINITY) continue;
+          for (let j = 0; j < count; j++) {
+            if (!this.inWall[j]) continue;
+            if (Math.abs(this.futureZ[i] - this.futureZ[j]) > WALL_GAP) continue;
+            this.inWall[i] = 1;
+            lanes |= this.hazardLanes[i];
+            grew = true;
+            break;
+          }
+        }
+      }
+      if (lanes === ALL_LANES) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Places a solid hazard in `lane`, sliding to another lane if that would seal the road and
+   * dropping the hazard entirely when no lane is safe. Returns the lane used, or -1 if skipped.
+   */
+  private placeSolid(
+    field: EntityField,
+    lane: number,
+    z: number,
+    attempts: number,
+    spawn: (lane: number) => Entity | null,
+  ): number {
+    for (let i = 0; i < attempts; i++) {
+      const candidate = (lane + i) % LANE_COUNT;
+      if (this.sealsRoad(field, laneX(candidate), z, 0)) continue;
+      return spawn(candidate) ? candidate : -1;
+    }
+    return -1;
+  }
+
+  private placeBlocker(field: EntityField, key: string, lane: number, z: number, attempts = LANE_COUNT): number {
+    return this.placeSolid(field, lane, z, attempts, (l) => field.spawnObstacle(key, laneX(l), z));
+  }
+
+  private placeStopped(
+    field: EntityField,
+    kind: VehicleKind,
+    lane: number,
+    z: number,
+    attempts = LANE_COUNT,
+  ): number {
+    return this.placeSolid(field, lane, z, attempts, (l) => field.spawnVehicle(kind, laneX(l), z, 0));
+  }
+
+  private placeTraffic(
+    field: EntityField,
+    kind: VehicleKind,
+    lane: number,
+    z: number,
+    speed: number,
+  ): Entity | null {
+    for (let i = 0; i < LANE_COUNT; i++) {
+      const candidate = (lane + i) % LANE_COUNT;
+      if (this.sealsRoad(field, laneX(candidate), z, speed)) continue;
+      return field.spawnVehicle(kind, laneX(candidate), z, speed);
+    }
+    return null;
+  }
+
   /** One blocked lane, with optional advance-warning cones. */
   private singleBlocker(field: EntityField, z: number, count: number): void {
-    const lane = this.randomLane();
+    const wanted = this.randomLane();
     const key = Math.random() < 0.55 ? pick(BLOCKERS) : "stoppedVehicle";
+    let lane: number;
     if (key === "stoppedVehicle") {
-      field.spawnVehicle(Math.random() < 0.3 ? "truck" : pick(TRAFFIC), laneX(lane), z, 0);
+      lane = this.placeStopped(field, Math.random() < 0.3 ? "truck" : pick(TRAFFIC), wanted, z);
     } else {
-      field.spawnObstacle(key, laneX(lane), z);
-      this.warningCones(field, lane, z - 13);
+      lane = this.placeBlocker(field, key, wanted, z);
+      if (lane >= 0) this.warningCones(field, lane, z - 13);
     }
-    this.lastFreeLane = this.randomLane(lane);
+    this.lastFreeLane = lane < 0 ? this.randomLane() : this.randomLane(lane);
     // Reward the safe line with a coin trail.
     this.coinTrail(field, z - 6, this.lastFreeLane, 3 + count);
   }
@@ -143,10 +284,11 @@ export class Director {
     const free = Math.floor(Math.random() * LANE_COUNT);
     for (let lane = 0; lane < LANE_COUNT; lane++) {
       if (lane === free) continue;
+      // No lane sliding here: the whole point of the pattern is which lane stays open.
       if (Math.random() < 0.5) {
-        field.spawnVehicle(pick(TRAFFIC), laneX(lane), z + (Math.random() - 0.5) * 6, 0);
+        this.placeStopped(field, pick(TRAFFIC), lane, z + (Math.random() - 0.5) * 6, 1);
       } else {
-        field.spawnObstacle(pick(BLOCKERS), laneX(lane), z);
+        this.placeBlocker(field, pick(BLOCKERS), lane, z, 1);
       }
     }
     this.lastFreeLane = free;
@@ -157,9 +299,9 @@ export class Director {
   private stagger(field: EntityField, z: number, pressure: number): void {
     const first = Math.floor(Math.random() * LANE_COUNT);
     const second = (first + 1 + Math.floor(Math.random() * (LANE_COUNT - 1))) % LANE_COUNT;
-    field.spawnVehicle(pick(TRAFFIC), laneX(first), z, 0);
+    this.placeStopped(field, pick(TRAFFIC), first, z, 1);
     const spacing = 24 + (1 - pressure) * 16;
-    field.spawnObstacle(pick(BLOCKERS), laneX(second), z - spacing);
+    this.placeBlocker(field, pick(BLOCKERS), second, z - spacing, 1);
     // With three lanes the untouched one is whatever is left over from 0 + 1 + 2.
     this.lastFreeLane = 3 - first - second;
     this.coinTrail(field, z - spacing / 2, this.lastFreeLane, 5);
@@ -167,22 +309,29 @@ export class Director {
 
   /** Slower-moving traffic the player overtakes; the main source of near misses. */
   private movingTraffic(field: EntityField, z: number, pressure: number): void {
-    const lane = this.randomLane();
     const relative = 8 + Math.random() * 12 + pressure * 6;
     const speed = Math.max(START_SPEED * 0.35, Math.min(MAX_SPEED, relative));
-    const entity = field.spawnVehicle(pick(TRAFFIC), laneX(lane), z, speed);
-    // Occasionally let a car ease across into a neighbouring lane, but never into the player.
-    if (entity && pressure > 0.5 && Math.random() < 0.3) {
+    const leader = this.placeTraffic(field, pick(TRAFFIC), this.randomLane(), z, speed);
+    const lane = leader ? laneOf(leader.x) : this.randomLane();
+    // Occasionally let a car ease across into a neighbouring lane, but never into the last gap.
+    if (leader && pressure > 0.5 && Math.random() < 0.3) {
       const dir = lane === 0 ? 1 : lane === LANE_COUNT - 1 ? -1 : Math.random() < 0.5 ? -1 : 1;
-      entity.driftTarget = dir * 3.6;
+      const target = dir * LANE_WIDTH;
+      if (!this.sealsRoad(field, leader.x + target, z, speed)) leader.driftTarget = target;
     }
+    let second = -1;
     if (Math.random() < 0.3 + pressure * 0.3) {
-      const second = this.randomLane(lane);
-      field.spawnVehicle(pick(TRAFFIC), laneX(second), z - 18 - Math.random() * 14, speed * 0.8);
-      this.lastFreeLane = 3 - lane - second;
-    } else {
-      this.lastFreeLane = this.randomLane(lane);
+      const trailer = this.placeTraffic(
+        field,
+        pick(TRAFFIC),
+        this.randomLane(lane),
+        z - 18 - Math.random() * 14,
+        speed * 0.8,
+      );
+      if (trailer) second = laneOf(trailer.x);
     }
+    this.lastFreeLane =
+      second >= 0 && second !== lane ? 3 - lane - second : this.randomLane(lane);
     this.coinTrail(field, z - 8, this.lastFreeLane, 4);
   }
 
@@ -233,13 +382,19 @@ export class Director {
       }
     } else {
       // Risky line hugging a blocker, worth more coins for a tighter line.
-      const lane = this.randomLane();
-      field.spawnObstacle(pick(BLOCKERS), laneX(lane), z - 22);
-      const beside = lane === 0 ? 1 : lane === LANE_COUNT - 1 ? LANE_COUNT - 2 : lane + 1;
+      const lane = this.placeBlocker(field, pick(BLOCKERS), this.randomLane(), z - 22);
+      const beside =
+        lane < 0
+          ? this.lastFreeLane
+          : lane === 0
+            ? 1
+            : lane === LANE_COUNT - 1
+              ? LANE_COUNT - 2
+              : lane + 1;
       for (let i = 0; i < 8; i++) {
         field.spawnCoin(laneX(beside), 1.05, z - i * 4.4);
       }
-      this.warningCones(field, lane, z - 34);
+      if (lane >= 0) this.warningCones(field, lane, z - 34);
     }
   }
 }
