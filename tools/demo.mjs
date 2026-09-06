@@ -67,6 +67,13 @@ await page.evaluate((dt) => {
     else g.idle(dt);
     g.renderer.render(g.scene, g.rig.camera);
   };
+  const fade = document.createElement("div");
+  fade.style.cssText =
+    "position:fixed;inset:0;background:#000;opacity:0;z-index:9999;pointer-events:none";
+  document.body.appendChild(fade);
+  window.__fade = (alpha) => {
+    fade.style.opacity = String(alpha);
+  };
 }, DT);
 
 // Autopilot: hold the emptiest lane, jump what can be jumped, and take coin lines when free.
@@ -121,41 +128,66 @@ async function record(seconds, drive = null, label = "") {
   if (label) console.log(`${label}: ${frames} frames (total ${frame})`);
 }
 
+/** Dips to black and back, so a jump to a different part of the road reads as a cut. */
+async function dip(direction) {
+  const frames = 5;
+  for (let i = 1; i <= frames; i++) {
+    const alpha = direction === "out" ? i / frames : 1 - i / frames;
+    await page.evaluate((a) => window.__fade(a), alpha);
+    await page.evaluate((index) => window.__tick(null, index), i);
+    await shoot();
+  }
+}
+
+/**
+ * Drives the run forward without drawing until the odometer reaches `metres`. Themes are keyed
+ * to distance, so this is how a section can start just before a cross-fade: forcing the theme
+ * instead would snap the whole world over in one frame and misrepresent the game.
+ */
+async function driveTo(metres) {
+  await page.evaluate((target) => {
+    const g = window.__APEX__.game;
+    if (g.state !== "playing") window.__APEX__.startRun();
+    for (let i = 0; i < 20000 && g.distance < target; i++) {
+      const solid = g.field.entities.filter(
+        (e) => e.active && e.role !== "coin" && !e.jumpable && e.z > -52 && e.z < -4,
+      );
+      const lane = Math.round(g.lanePosition / 3.6);
+      const threat = solid.find((e) => Math.round((e.x + e.laneDrift) / 3.6) === lane);
+      if (threat) g.input(lane > -1 ? "left" : "right");
+      g.simulate(1 / 60);
+      if (g.state !== "playing") window.__APEX__.startRun();
+    }
+  }, metres);
+}
+
 // --- Menu, garage, skin change.
 await page.evaluate(() => window.__APEX__.openMenu());
 await record(1.4, null, "menu");
 await page.evaluate(() => window.__APEX__.openGarage());
-await record(1.4, null, "garage");
+await record(1.2, null, "garage");
 await page.evaluate(() => document.querySelectorAll("#skin-swatches .swatch")[2].click());
 await record(1.5, null, "garage midnight");
 await page.evaluate(() => document.querySelectorAll("#skin-swatches .swatch")[0].click());
-await record(1.0, null, "garage crimson");
+await record(0.9, null, "garage crimson");
 
-// --- The run itself, through all three environments.
-await page.evaluate(() => {
-  window.__APEX__.startRun();
-  const g = window.__APEX__.game;
-  // Warm up off camera so the video opens with traffic and coins already on the road.
-  for (let i = 0; i < 260; i++) {
-    const solid = g.field.entities.filter((e) => e.active && e.role !== "coin" && !e.jumpable && e.z > -52 && e.z < -4);
-    const lane = Math.round(g.lanePosition / 3.6);
-    const threat = solid.find((e) => Math.round((e.x + e.laneDrift) / 3.6) === lane);
-    if (threat) g.input(lane > -1 ? "left" : "right");
-    g.simulate(1 / 60);
-    if (g.state !== "playing") window.__APEX__.startRun();
-  }
-});
-await record(4.5, AUTOPILOT, "coastal run");
+// --- Each leg starts just short of a theme boundary, so the 260 m cross-fade plays on camera.
+await dip("out");
+await driveTo(1150);
+await dip("in");
+await record(6.5, AUTOPILOT, "coast into desert");
 
-await page.evaluate(() => window.__APEX__.game.forceTheme("desert"));
-await record(3.5, AUTOPILOT, "desert run");
+await dip("out");
+await driveTo(2650);
+await dip("in");
+await record(6.5, AUTOPILOT, "desert into night");
 
-await page.evaluate(() => window.__APEX__.game.forceTheme("night"));
-await record(3.5, AUTOPILOT, "night run");
+await dip("out");
+await driveTo(4100);
+await dip("in");
+await record(6.0, AUTOPILOT, "night into dawn");
 
 // --- Crash and the game over screen.
-await page.evaluate(() => window.__APEX__.game.forceTheme("coastal"));
-await record(1.2, AUTOPILOT, "back to coast");
 await record(2.6, `(g) => {
   if (g.state !== "playing") return;
   const solid = g.field.entities.find((e) => e.active && e.role !== "coin" && !e.jumpable && e.z > -60 && e.z < -6);
