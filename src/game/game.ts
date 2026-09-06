@@ -70,10 +70,13 @@ function buildPlinth(materials: Materials): THREE.Group {
 
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(4.8, 48),
-    new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.32, metalness: 0.55 }),
+    // Charcoal rather than black, and rough enough that the sky does not smear a hard white
+    // streak across the turntable.
+    new THREE.MeshStandardMaterial({ color: 0x212734, roughness: 0.52, metalness: 0.3 }),
   );
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0.03;
+  floor.position.y = 0.008;
+  floor.receiveShadow = true;
   group.add(floor);
 
   const rim = new THREE.Mesh(
@@ -90,7 +93,7 @@ function buildPlinth(materials: Materials): THREE.Group {
       map: materials.glow,
       color: 0xffd9a8,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.3,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
@@ -440,6 +443,7 @@ export class Game {
     this.particles.update(dt);
     this.world.update(0, dt, 0);
     this.rig.update(dt, this.player.x, 0, 0, 0, false);
+    this.world.lightShowcase(this.rig.camera.position, SHOWCASE_X);
     this.audio.updateDrive(0.12, this.state === "menu" || this.state === "garage" ? 0.35 : 0);
     this.hooks.onSpeedFactor?.(0);
   }

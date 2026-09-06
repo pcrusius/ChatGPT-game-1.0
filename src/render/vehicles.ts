@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   PartBuilder,
+  arch,
   loft,
   mergeAll,
   roundedBox,
@@ -89,10 +90,14 @@ function buildSupercar(): VehicleModel {
   // Window surround / beltline trim.
   b.pair("trim", () => roundedBox(0.05, 0.06, 1.7, 0.02), 0.63, 0.79, 0.06);
 
-  // Dark sill blades under the fender line stand in for wheel-arch shadow without a boolean
-  // cut in the body surface.
-  b.pair("trim", () => roundedBox(0.06, 0.3, 1.0, 0.02), 0.9, 0.34, -1.4);
-  b.pair("trim", () => roundedBox(0.06, 0.32, 1.1, 0.02), 0.93, 0.36, 1.44);
+  // Body-coloured fender lips. The tub cannot be cut open for a wheel arch, so the arch is
+  // added over the tyre instead: it covers the top of the wheel the way a fender does and
+  // stops the tyre reading as a black ring stuck to the flank.
+  b.pair("paint", () => arch(0.385, 0.05, 0.32, 168), 0.74, 0.35, -1.4);
+  b.pair("paint", () => arch(0.41, 0.055, 0.37, 168), 0.78, 0.375, 1.44);
+  // Dark inner arch behind the lip, so the gap above the tyre reads as shadow, not sky.
+  b.pair("trim", () => arch(0.35, 0.045, 0.24, 150), 0.68, 0.35, -1.4);
+  b.pair("trim", () => arch(0.375, 0.05, 0.28, 150), 0.72, 0.375, 1.44);
 
   // Front end: splitter, canards, lower intakes, grille.
   b.at("carbon", roundedBox(1.66, 0.09, 0.5, 0.04), 0, 0.18, -2.02);
@@ -112,7 +117,7 @@ function buildSupercar(): VehicleModel {
   b.at("trim", roundedBox(1.1, 0.03, 0.12, 0.02), 0, 0.69, -0.98);
 
   // Side sills and intake blades.
-  b.pair("carbon", () => roundedBox(0.1, 0.13, 1.9, 0.04), 0.9, 0.235, 0.16);
+  b.pair("carbon", () => roundedBox(0.1, 0.13, 1.9, 0.04), 0.86, 0.235, 0.16);
   b.pair("trim", () => taperedBox(0.1, 0.08, 0.3, 0.34, 0.22), 0.92, 0.5, 0.86);
 
   // Mirrors on slim stalks, set low and outboard like a modern exotic.
@@ -150,10 +155,10 @@ function buildSupercar(): VehicleModel {
   return {
     roles: b.build(),
     wheels: [
-      { x: 0.8, z: -1.4, radius: 0.35, width: 0.3 },
-      { x: -0.8, z: -1.4, radius: 0.35, width: 0.3 },
-      { x: 0.82, z: 1.44, radius: 0.375, width: 0.36 },
-      { x: -0.82, z: 1.44, radius: 0.375, width: 0.36 },
+      { x: 0.74, z: -1.4, radius: 0.35, width: 0.28 },
+      { x: -0.74, z: -1.4, radius: 0.35, width: 0.28 },
+      { x: 0.78, z: 1.44, radius: 0.375, width: 0.33 },
+      { x: -0.78, z: 1.44, radius: 0.375, width: 0.33 },
     ],
     halfLength: 2.3,
     halfWidth: 1.02,
@@ -480,18 +485,18 @@ export const TRAFFIC_KINDS: VehicleKind[] = ["sedan", "suv", "sports", "van", "p
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Tyre revolved around the axle. The profile is an open annulus — inner radius 0.7, outer 0.98
- * — so the rim is visible through the middle instead of being swallowed by a closed torus.
- * Radii are normalised to 1 and scaled per wheel by the instance matrix.
+ * Tyre revolved around the axle. The profile is an open annulus — inner radius 0.62, outer 0.99
+ * — so the rim fills the middle instead of the wheel reading as a hollow black donut. Radii are
+ * normalised to 1 and scaled per wheel by the instance matrix.
  */
 function tireGeometry(): THREE.BufferGeometry {
   const profile: THREE.Vector2[] = [
-    new THREE.Vector2(0.7, -0.5),
+    new THREE.Vector2(0.62, -0.5),
     new THREE.Vector2(0.93, -0.5),
     new THREE.Vector2(0.995, -0.34),
     new THREE.Vector2(0.995, 0.34),
     new THREE.Vector2(0.93, 0.5),
-    new THREE.Vector2(0.7, 0.5),
+    new THREE.Vector2(0.62, 0.5),
   ];
   const geo = new THREE.LatheGeometry(profile, 16);
   geo.rotateZ(Math.PI / 2);
@@ -506,22 +511,23 @@ function tireGeometry(): THREE.BufferGeometry {
 function rimGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  const lip = new THREE.TorusGeometry(0.7, 0.05, 4, 16);
+  const lip = new THREE.TorusGeometry(0.615, 0.05, 4, 16);
   lip.rotateY(Math.PI / 2);
-  lip.translate(0.28, 0, 0);
+  lip.translate(0.3, 0, 0);
   parts.push(lip);
 
-  const barrel = new THREE.CylinderGeometry(0.69, 0.66, 0.86, 16, 1, true);
+  const barrel = new THREE.CylinderGeometry(0.61, 0.58, 0.88, 16, 1, true);
   barrel.rotateZ(Math.PI / 2);
-  barrel.translate(-0.05, 0, 0);
+  barrel.translate(-0.04, 0, 0);
   parts.push(barrel);
 
-  const hub = new THREE.CylinderGeometry(0.21, 0.17, 0.14, 10);
+  const hub = new THREE.CylinderGeometry(0.2, 0.16, 0.14, 10);
   hub.rotateZ(Math.PI / 2);
-  hub.translate(0.24, 0, 0);
+  hub.translate(0.26, 0, 0);
   parts.push(hub);
 
-  const dish = new THREE.CylinderGeometry(0.67, 0.67, 0.03, 16);
+  // Solid disc across the back of the barrel: without it the road shows through the wheel.
+  const dish = new THREE.CylinderGeometry(0.59, 0.59, 0.03, 16);
   dish.rotateZ(Math.PI / 2);
   dish.translate(-0.4, 0, 0);
   parts.push(dish);
@@ -529,15 +535,15 @@ function rimGeometry(): THREE.BufferGeometry {
   const spokes = 5;
   for (let i = 0; i < spokes; i++) {
     // Spokes stay in the wheel plane: extend along Y, then rotate about the axle.
-    const spoke = taperedBox(0.13, 0.08, 0.56, 0.22, 0.1);
-    spoke.translate(0, 0.38, 0);
+    const spoke = taperedBox(0.14, 0.09, 0.5, 0.22, 0.1);
+    spoke.translate(0, 0.35, 0);
     spoke.rotateX((i / spokes) * Math.PI * 2);
-    spoke.translate(0.2, 0, 0);
+    spoke.translate(0.22, 0, 0);
     parts.push(spoke);
-    const split = taperedBox(0.09, 0.055, 0.48, 0.12, 0.06);
-    split.translate(0, 0.42, 0);
+    const split = taperedBox(0.1, 0.06, 0.44, 0.12, 0.06);
+    split.translate(0, 0.38, 0);
     split.rotateX(((i + 0.5) / spokes) * Math.PI * 2);
-    split.translate(0.16, 0, 0);
+    split.translate(0.18, 0, 0);
     parts.push(split);
   }
   return mergeAll(parts);

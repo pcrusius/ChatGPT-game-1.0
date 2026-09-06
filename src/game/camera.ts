@@ -12,6 +12,9 @@ const CHASE = {
 
 const SCRATCH = new THREE.Vector3();
 
+/** Fraction of the half-width the showroom subject is pushed right of centre. */
+const PANEL_OFFSET = 0.32;
+
 /**
  * Chase camera with deliberate lag. Position and aim are separate springs, FOV opens up with
  * speed, and short impulses cover landings and crashes without making the view unreadable.
@@ -80,16 +83,17 @@ export class CameraRig {
     if (this.mode === "frozen") return;
 
     if (this.mode === "garage") {
-      // Slow orbit around the car, offset right so the garage panel never covers it.
+      // Slow orbit around the car on its turntable.
       this.garageAngle += dt * 0.26;
-      const radius = 7.6;
+      const radius = 8.4;
       this.camera.position.set(
         Math.sin(this.garageAngle) * radius + 2.4,
-        1.9 + Math.sin(this.garageAngle * 0.7) * 0.45,
+        2.05 + Math.sin(this.garageAngle * 0.7) * 0.45,
         Math.cos(this.garageAngle) * radius,
       );
-      this.camera.lookAt(2.4, 0.68, 0);
+      this.camera.lookAt(2.4, 0.7, 0);
       this.applyFov(dt, 38);
+      this.framePastPanel();
       return;
     }
 
@@ -154,6 +158,15 @@ export class CameraRig {
     this.camera.rotateZ(this.roll);
 
     this.applyFov(dt, 60 + speedT * 15 + jitter * 3);
+  }
+
+  /**
+   * Pans the aim left so the subject lands in the clear part of the screen. The garage panel
+   * covers the left third, and a car centred in the viewport is a car half behind the UI.
+   */
+  private framePastPanel(): void {
+    const halfHeight = Math.tan(THREE.MathUtils.degToRad(this.camera.fov * 0.5));
+    this.camera.rotateY(Math.atan(PANEL_OFFSET * halfHeight * this.camera.aspect));
   }
 
   private applyFov(dt: number, target: number): void {

@@ -156,13 +156,23 @@ await page.evaluate((drive) => {
 }, AUTOPILOT);
 await shot("08_jump");
 
-// Debug overlay on, so the counters are visible.
+// Debug overlay on. Its counters are filled by the real frame loop, so the loop is handed back
+// for a few (very slow, software-rendered) frames rather than being stepped by hand.
 await page.evaluate((drive) => {
   const g = window.__APEX__.game;
   g.toggleDebug();
   window.__warm(3, eval(drive));
+  // The real loop runs at about a frame a second here and nothing is steering, so the road is
+  // cleared first: the shot is of the overlay, not of a crash.
+  window.__warm(0.6, (game) => {
+    for (const e of game.field.entities) if (e.role !== "coin") e.active = false;
+  });
+  g.start();
 }, AUTOPILOT);
-await shot("09_debug_overlay");
+await new Promise((r) => setTimeout(r, 4000));
+await page.evaluate(() => window.__APEX__.game.stop());
+await page.screenshot({ path: `${outDir}/09_debug_overlay.png` });
+console.log("shot 09_debug_overlay");
 await page.evaluate(() => window.__APEX__.game.toggleDebug());
 
 // ------------------------------------------------------------------------ pause and over

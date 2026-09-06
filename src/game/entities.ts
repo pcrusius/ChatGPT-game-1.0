@@ -223,12 +223,12 @@ export class EntityField {
       new InstancedSet("coin", [{ geometry: coinParts.build().get("c")!, material: materials.coin }], 64),
     );
 
-    const glowGeo = new THREE.PlaneGeometry(1.35, 1.35);
+    const glowGeo = new THREE.PlaneGeometry(1.2, 1.2);
     const glowMaterial = new THREE.MeshBasicMaterial({
       map: materials.glow,
       color: 0xffc84a,
       transparent: true,
-      opacity: 0.42,
+      opacity: 0.36,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       fog: true,
@@ -624,13 +624,19 @@ export class EntityField {
       const x = entity.x + entity.laneDrift;
 
       if (entity.role === "coin") {
-        // Collection flicks the coin up, swells it briefly and collapses it to nothing, so it
-        // can never linger on screen as an oversized slab of gold.
         const t = entity.collectT;
-        const pop = t >= 0 ? (1 + t * 1.1) * (1 - t * t) : 1;
-        const lift = t >= 0 ? t * 1.4 : 0;
-        set.push(x, entity.y + lift, entity.z, entity.spin, pop, WHITE);
-        this.coinGlow.push(x, entity.y + lift, entity.z - 0.05, 0, pop * 1.3, WHITE);
+        // Collection flicks the coin up and collapses it, so it never lingers as a slab of gold.
+        // A coin the player drove past shrinks away as it draws level instead of sliding into
+        // the lens: it floats at camera height, where a flat disc reads as an orange smear.
+        // The taper starts behind the pickup window so a coin never shrinks out of reach.
+        const scale =
+          t >= 0
+            ? (1 - t * t) * (1 + t * 0.3)
+            : THREE.MathUtils.clamp((1.4 - entity.z) / 2.8, 0, 1);
+        if (scale <= 0.01) continue;
+        const lift = t >= 0 ? t * 1.7 : 0;
+        set.push(x, entity.y + lift, entity.z, entity.spin, scale, WHITE);
+        this.coinGlow.push(x, entity.y + lift, entity.z - 0.05, 0, scale * 1.15, WHITE);
         continue;
       }
 

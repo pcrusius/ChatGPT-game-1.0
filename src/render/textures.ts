@@ -271,6 +271,57 @@ export function makeStreakTexture(size = 128): THREE.Texture {
   return texture;
 }
 
+/**
+ * Roadside billboard artwork. Deliberately abstract — bold chevrons, a speed streak and a
+ * couple of copy bars — so it reads as advertising at 200 km/h without faking legible text.
+ */
+export function makePosterTexture(width = 512): THREE.Texture {
+  const height = Math.round(width / 2);
+  const [el, ctx] = canvas(width, height);
+
+  const sky = ctx.createLinearGradient(0, 0, 0, height);
+  sky.addColorStop(0, "#12234a");
+  sky.addColorStop(1, "#3a1d52");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height);
+
+  // Chevrons sweeping off the right edge.
+  ctx.save();
+  ctx.translate(width * 0.52, 0);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = ["#ff8a2b", "#ffb347", "#ff6f3d", "#ffd27a"][i];
+    ctx.globalAlpha = 0.92 - i * 0.14;
+    ctx.beginPath();
+    const x = i * width * 0.14;
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + width * 0.09, 0);
+    ctx.lineTo(x + width * 0.09 - height * 0.5, height);
+    ctx.lineTo(x - height * 0.5, height);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // Horizon band and a low sun, echoing the desert theme.
+  ctx.fillStyle = "#f7e2b0";
+  ctx.beginPath();
+  ctx.arc(width * 0.26, height * 0.44, height * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Copy bars: a heavy headline and two lighter lines.
+  ctx.fillStyle = "#f4f7ff";
+  ctx.fillRect(width * 0.08, height * 0.62, width * 0.34, height * 0.11);
+  ctx.globalAlpha = 0.6;
+  ctx.fillRect(width * 0.08, height * 0.78, width * 0.24, height * 0.05);
+  ctx.fillRect(width * 0.08, height * 0.87, width * 0.15, height * 0.05);
+  ctx.globalAlpha = 1;
+
+  const texture = new THREE.CanvasTexture(el);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 /** Stylised foliage card: a blob of leaves with soft alpha, used for distant vegetation. */
 export function makeFoliageTexture(size = 128): THREE.Texture {
   const [el, ctx] = canvas(size);

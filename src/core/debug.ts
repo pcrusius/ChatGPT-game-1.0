@@ -36,9 +36,13 @@ export class DebugOverlay {
     if (!this.visible) return;
 
     const info = renderer.info;
+    // Until the first half-second window closes there is no rate to report yet.
+    const timing =
+      this.fps > 0
+        ? `FPS ${this.fps.toFixed(0)}  (${(1000 / this.fps).toFixed(1)} ms)  worst ${(this.worstShown * 1000).toFixed(1)} ms`
+        : "FPS --";
     const rows = [
-      `FPS ${this.fps.toFixed(0)}  (${(1000 / Math.max(this.fps, 0.001)).toFixed(1)} ms)`,
-      `worst ${(this.worstShown * 1000).toFixed(1)} ms`,
+      timing,
       `draw calls ${info.render.calls}`,
       `triangles ${info.render.triangles.toLocaleString()}`,
       `geometries ${info.memory.geometries}  textures ${info.memory.textures}`,

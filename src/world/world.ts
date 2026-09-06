@@ -304,6 +304,22 @@ export class World {
     this.ocean.position.x = -430 + Math.sin(this.oceanPhase) * 4;
   }
 
+  /**
+   * Re-aims the key and fill lights onto the showroom car from the side the camera is on, so
+   * the flank on display is lit instead of falling into the sun's shadow. The run lights are
+   * reused rather than adding studio ones: an extra light would change the scene's light count
+   * and force every material to recompile on the way into a run.
+   *
+   * Call after `update`, which restores the themed sun each frame.
+   */
+  lightShowcase(camera: THREE.Vector3, carX: number): void {
+    this.sun.position.set(carX + camera.x * 1.6, 22, camera.z * 1.6 + 6);
+    this.sun.target.position.set(carX, 0.5, 0);
+    this.sun.intensity = 3.1;
+    this.fill.position.set(carX - camera.x * 0.8, 9, -camera.z * 0.8);
+    this.fill.intensity = 1.1;
+  }
+
   dispose(): void {
     this.sky.dispose();
     this.road.dispose();

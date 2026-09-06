@@ -206,9 +206,11 @@ export class Scenery {
       const bush = new PartBuilder<"b">();
       for (let i = 0; i < 3; i++) {
         bush.add("b", (() => {
-          const blob = new THREE.IcosahedronGeometry(0.6 - i * 0.1, 0);
-          blob.scale(1.2, 0.8, 1.1);
-          blob.translate((i - 1) * 0.5, 0.4 + (i % 2) * 0.16, (i - 1) * 0.3);
+          // Barely flattened: squashed blobs read as green puddles on the verge rather than
+          // as shrubs, which is how they looked in the first pass.
+          const blob = new THREE.IcosahedronGeometry(0.58 - i * 0.09, 0);
+          blob.scale(1.1, 1.02, 1.05);
+          blob.translate((i - 1) * 0.44, 0.52 + (i % 2) * 0.2, (i - 1) * 0.28);
           return blob;
         })());
       }
@@ -219,7 +221,7 @@ export class Scenery {
         minLateral: 1,
         maxLateral: 22,
         minScale: 0.7,
-        maxScale: 1.9,
+        maxScale: 1.5,
         capacity: 34,
       });
     }
@@ -373,7 +375,7 @@ export class Scenery {
       });
     }
 
-    // --- Billboard: twin posts and a large blank face.
+    // --- Billboard: twin posts, a dark frame and printed artwork on both faces.
     {
       const posts = new PartBuilder<"p">();
       posts.pair("p", () => roundedBox(0.26, 5.4, 0.26, 0.05, 1), 1.7, 2.7, 0);
@@ -381,12 +383,23 @@ export class Scenery {
       face.translate(0, 6.6, 0);
       const trim = roundedBox(6.8, 0.22, 0.3, 0.08, 1);
       trim.translate(0, 8.35, 0);
+      // Slots are yawed at random, so the artwork is printed back to back.
+      const art = new PartBuilder<"a">();
+      for (const facing of [1, -1]) {
+        art.add("a", (() => {
+          const panel = new THREE.PlaneGeometry(6.05, 2.9);
+          if (facing < 0) panel.rotateY(Math.PI);
+          panel.translate(0, 6.6, facing * 0.11);
+          return panel;
+        })());
+      }
       this.add({
         name: "billboard",
         contact: 0.8,
         parts: [
           { geometry: posts.build().get("p")!, material: m.darkMetal },
-          { geometry: face, material: m.signWarning },
+          { geometry: face, material: m.darkMetal },
+          { geometry: art.build().get("a")!, material: m.poster },
           { geometry: trim, material: m.concrete },
         ],
         minLateral: 8,
@@ -399,13 +412,16 @@ export class Scenery {
 
     // --- Lamp-lit verge hillock, used to break up flat terrain in every theme.
     {
-      const mound = new THREE.SphereGeometry(1, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+      const mound = new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
       mound.scale(1, 0.42, 1.4);
+      // Sunk a little so the rim blends into the verge instead of standing on it as a hard edge.
+      mound.translate(0, -0.07, 0);
       this.add({
         name: "lamp",
         parts: [{ geometry: mound, material: m.terrainFar }],
-        minLateral: 14,
-        maxLateral: 70,
+        // Kept well back: a 20 m mound beside the shoulder reads as a green wall, not a hill.
+        minLateral: 26,
+        maxLateral: 90,
         minScale: 6,
         maxScale: 22,
         capacity: 26,

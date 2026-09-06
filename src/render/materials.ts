@@ -3,6 +3,7 @@ import {
   makeFoliageTexture,
   makeGlowTexture,
   makeNoiseNormal,
+  makePosterTexture,
   makeRoadTexture,
   makeStreakTexture,
   makeWindowTexture,
@@ -39,6 +40,7 @@ export class Materials {
   readonly roadMap: THREE.Texture;
   readonly asphaltNormal: THREE.Texture;
   readonly windowMap: THREE.Texture;
+  readonly posterMap: THREE.Texture;
   readonly glow: THREE.Texture;
   readonly contactShadow: THREE.MeshBasicMaterial;
   readonly streak: THREE.Texture;
@@ -59,6 +61,7 @@ export class Materials {
   readonly buildingWindows: THREE.MeshStandardMaterial;
   readonly signFace: THREE.MeshStandardMaterial;
   readonly signWarning: THREE.MeshStandardMaterial;
+  readonly poster: THREE.MeshStandardMaterial;
   readonly cone: THREE.MeshStandardMaterial;
   readonly coneStripe: THREE.MeshStandardMaterial;
   readonly barrierBody: THREE.MeshStandardMaterial;
@@ -113,6 +116,7 @@ export class Materials {
     this.asphaltNormal.repeat.set(14, 48);
     this.asphaltNormal.anisotropy = quality.anisotropy;
     this.windowMap = track(makeWindowTexture());
+    this.posterMap = track(makePosterTexture(quality.level === "low" ? 256 : 512));
     this.glow = track(makeGlowTexture());
     this.streak = track(makeStreakTexture());
     this.foliage = track(makeFoliageTexture());
@@ -169,6 +173,7 @@ export class Materials {
     );
     this.signFace = std({ color: 0x1c6b40, roughness: 0.62, metalness: 0.05 });
     this.signWarning = std({ color: 0xf0a417, roughness: 0.62, metalness: 0.05 });
+    this.poster = std({ map: this.posterMap, roughness: 0.66, metalness: 0.04 });
     this.cone = std({ color: 0xf25a1c, roughness: 0.74, metalness: 0.02 });
     this.coneStripe = std({ color: 0xf3f3f0, roughness: 0.62, metalness: 0.02 });
     this.barrierBody = std({ color: 0xe6e2d9, roughness: 0.76, metalness: 0.03 });
@@ -211,8 +216,10 @@ export class Materials {
     this.trim = std({ color: 0x1a1c20, roughness: 0.58, metalness: 0.28 });
     this.carbon = std({ color: 0x14161a, roughness: 0.34, metalness: 0.62, envMapIntensity: 1.1 });
     this.tire = std({ color: 0x15161a, roughness: 0.88, metalness: 0.05 });
-    // Rim and brake colour comes from per-instance colour, so the base stays white.
-    this.rim = std({ color: 0xffffff, roughness: 0.24, metalness: 1, envMapIntensity: 1.5 });
+    // Rim and brake colour comes from per-instance colour, so the base stays white. Fully
+    // metallic rims only reflect the inside of the wheel arch, which is black, so the finish is
+    // deliberately part-diffuse: the spokes have to read against the tyre.
+    this.rim = std({ color: 0xffffff, roughness: 0.34, metalness: 0.55, envMapIntensity: 1.5 });
     this.brake = std({ color: 0xffffff, roughness: 0.5, metalness: 0.5 });
 
     this.headlight = emissive(
