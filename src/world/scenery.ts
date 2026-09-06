@@ -226,11 +226,20 @@ export class Scenery {
       });
     }
 
-    // --- Rock: faceted boulder.
+    // --- Rock: faceted boulder. A bare icosahedron is too regular to read as stone, so each
+    // vertex is pushed in or out by a fixed amount before the faces are flat-shaded.
     {
       const rock = new THREE.IcosahedronGeometry(1, 0);
-      rock.scale(1.3, 0.85, 1.1);
-      rock.translate(0, 0.6, 0);
+      const pos = rock.getAttribute("position") as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const jitter = 0.78 + rand(i * 3.7 + 1.3, 11) * 0.44;
+        pos.setXYZ(i, pos.getX(i) * jitter, pos.getY(i) * jitter, pos.getZ(i) * jitter);
+      }
+      pos.needsUpdate = true;
+      rock.computeVertexNormals();
+      rock.scale(1.3, 0.8, 1.1);
+      // Sunk slightly, so the boulder emerges from the ground instead of resting on it.
+      rock.translate(0, 0.5, 0);
       this.add({
         name: "rock",
         contact: 1.5,

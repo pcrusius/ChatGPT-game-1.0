@@ -84,7 +84,8 @@ export const THEMES: Record<ThemeId, Theme> = {
     terrainFar: 0x4a7f57,
     roadTint: 0xffffff,
     leaf: 0x43a047,
-    rock: 0x9b9184,
+    // Cool granite. Warm stone next to this much green reads as a stray desert prop.
+    rock: 0x7c848c,
     ocean: 0x1683c4,
     oceanVisible: true,
     nightFactor: 0,

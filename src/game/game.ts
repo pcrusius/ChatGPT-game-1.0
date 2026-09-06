@@ -70,9 +70,10 @@ function buildPlinth(materials: Materials): THREE.Group {
 
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(4.8, 48),
-    // Charcoal rather than black, and rough enough that the sky does not smear a hard white
-    // streak across the turntable.
-    new THREE.MeshStandardMaterial({ color: 0x212734, roughness: 0.52, metalness: 0.3 }),
+    // Mid slate, not charcoal: the car's contact shadow is what sits it on the turntable, and
+    // a 40% shadow cast onto near-black is a shadow nobody can see. Rough enough that the sky
+    // does not smear a hard white streak across it.
+    new THREE.MeshStandardMaterial({ color: 0x424b5c, roughness: 0.62, metalness: 0.2 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.008;
@@ -93,7 +94,7 @@ function buildPlinth(materials: Materials): THREE.Group {
       map: materials.glow,
       color: 0xffd9a8,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.22,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
@@ -437,7 +438,14 @@ export class Game {
     this.wheels.beginFrame();
     this.shadows.begin();
     this.player.update(dt, 0, this.wheels);
-    this.shadows.push(this.player.x, 0, 3.4, 6.4, 1);
+    // On the turntable the key light comes from the camera's side, so the cast shadow falls
+    // behind the car where nobody can see it and the car reads as floating. A wide soft body
+    // shadow plus a tight patch under each contact patch is what sits it on the floor.
+    this.shadows.setOpacity(0.5);
+    this.shadows.push(this.player.x, 0, 4.1, 6.8, 1);
+    for (const wheel of this.player.view.model.wheels) {
+      this.shadows.push(this.player.x + wheel.x, wheel.z, wheel.radius * 3, wheel.radius * 3.6, 1);
+    }
     this.shadows.end();
     this.wheels.endFrame();
     this.particles.update(dt);

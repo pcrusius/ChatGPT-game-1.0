@@ -178,12 +178,13 @@ export class Materials {
     this.coneStripe = std({ color: 0xf3f3f0, roughness: 0.62, metalness: 0.02 });
     this.barrierBody = std({ color: 0xe6e2d9, roughness: 0.76, metalness: 0.03 });
     this.barrierStripe = std({ color: 0xef5a1e, roughness: 0.72, metalness: 0.03 });
-    // Emissive enough to read at distance, but dim enough that the rim and emboss still catch
-    // a highlight instead of flattening into a plain orange circle up close.
+    // Emissive lifts the coin out of the road at distance, but it is flat light: past about a
+    // quarter it swamps the struck relief and every coin turns into an orange circle. The night
+    // value is the smallest that still reads against unlit asphalt.
     this.coin = emissive(
-      { color: 0xffcf45, emissive: 0xff9c00, roughness: 0.16, metalness: 1, envMapIntensity: 2.1 },
-      0.14,
-      0.55,
+      { color: 0xffd257, emissive: 0xffa11a, roughness: 0.14, metalness: 1, envMapIntensity: 2.4 },
+      0.22,
+      0.36,
     );
 
     this.glass =

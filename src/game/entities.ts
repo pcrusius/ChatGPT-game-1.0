@@ -140,6 +140,36 @@ const VEHICLE_HITBOX: Record<string, { halfWidth: number; halfLength: number; he
 };
 
 /**
+ * A struck coin: raised rim, sunken field, domed centre boss, bevelled edge. A plain disc was
+ * the wrong shape for this — its face is one flat plane, so every pixel of it shades the same
+ * and a coin flat-on to the camera reads as an orange sticker. Curving the face across the
+ * radius is what makes it catch light like metal.
+ *
+ * The profile is revolved about Z, which is the axis the coin spins on.
+ */
+function coinGeometry(): THREE.BufferGeometry {
+  const profile: [number, number][] = [
+    [0.0, 0.052],
+    [0.17, 0.06],
+    [0.23, 0.034],
+    [0.38, 0.038],
+    [0.435, 0.056],
+    [0.47, 0.0],
+  ];
+  const points: THREE.Vector2[] = [];
+  for (const [r, z] of profile) points.push(new THREE.Vector2(r, z));
+  for (let i = profile.length - 2; i >= 0; i--) {
+    points.push(new THREE.Vector2(profile[i][0], -profile[i][1]));
+  }
+  const geo = new THREE.LatheGeometry(points, 18);
+  geo.rotateX(Math.PI / 2);
+  // A few degrees off square. Coins spin about Y, so a dead-flat one presents its face to the
+  // camera edge-on to the key light twice a turn; leaning it keeps a highlight travelling.
+  geo.rotateZ(0.14);
+  return geo;
+}
+
+/**
  * Every gameplay entity in one place: fixed-size pool, instanced rendering, and no allocation
  * after construction.
  */
@@ -208,19 +238,9 @@ export class EntityField {
 
     this.registerObstacles(materials);
 
-    // Coins: one instanced disc for every coin on screen, plus an additive halo.
-    const coinParts = new PartBuilder<"c">();
-    coinParts.add("c", tubeZ(0.44, 0.09, 18));
-    coinParts.add("c", (() => {
-      const rim = new THREE.TorusGeometry(0.44, 0.05, 4, 18);
-      return rim;
-    })());
-    coinParts.add("c", (() => {
-      const emboss = tubeZ(0.24, 0.13, 12);
-      return emboss;
-    })());
+    // Coins: one instanced struck disc for every coin on screen, plus an additive halo.
     this.register(
-      new InstancedSet("coin", [{ geometry: coinParts.build().get("c")!, material: materials.coin }], 64),
+      new InstancedSet("coin", [{ geometry: coinGeometry(), material: materials.coin }], 64),
     );
 
     const glowGeo = new THREE.PlaneGeometry(1.2, 1.2);

@@ -93,11 +93,13 @@ function buildSupercar(): VehicleModel {
   // Body-coloured fender lips. The tub cannot be cut open for a wheel arch, so the arch is
   // added over the tyre instead: it covers the top of the wheel the way a fender does and
   // stops the tyre reading as a black ring stuck to the flank.
-  b.pair("paint", () => arch(0.385, 0.05, 0.32, 168), 0.74, 0.35, -1.4);
-  b.pair("paint", () => arch(0.41, 0.055, 0.37, 168), 0.78, 0.375, 1.44);
-  // Dark inner arch behind the lip, so the gap above the tyre reads as shadow, not sky.
-  b.pair("trim", () => arch(0.35, 0.045, 0.24, 150), 0.68, 0.35, -1.4);
-  b.pair("trim", () => arch(0.375, 0.05, 0.28, 150), 0.72, 0.375, 1.44);
+  b.pair("paint", () => arch(0.395, 0.058, 0.38, 172), 0.74, 0.35, -1.4);
+  b.pair("paint", () => arch(0.42, 0.062, 0.43, 172), 0.78, 0.375, 1.44);
+  // Dark inner arch behind the lip, so the gap above the tyre reads as shadow, not sky. Kept
+  // narrower than the tyre and inside the lip: any of it that clears both turns back into the
+  // black horseshoe stuck over the wheel that the lip was added to get rid of.
+  b.pair("trim", () => arch(0.335, 0.033, 0.2, 150), 0.68, 0.35, -1.4);
+  b.pair("trim", () => arch(0.358, 0.036, 0.24, 150), 0.72, 0.375, 1.44);
 
   // Front end: splitter, canards, lower intakes, grille.
   b.at("carbon", roundedBox(1.66, 0.09, 0.5, 0.04), 0, 0.18, -2.02);
@@ -485,20 +487,21 @@ export const TRAFFIC_KINDS: VehicleKind[] = ["sedan", "suv", "sports", "van", "p
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Tyre revolved around the axle. The profile is an open annulus — inner radius 0.62, outer 0.99
- * — so the rim fills the middle instead of the wheel reading as a hollow black donut. Radii are
- * normalised to 1 and scaled per wheel by the instance matrix.
+ * Tyre revolved around the axle. The profile is an open annulus whose bore is 0.76 of the outer
+ * radius: a supercar runs a low-profile tyre, and the tall sidewall the first pass had made the
+ * wheel read as a black donut with a small hubcap in it. Radii are normalised to 1 and scaled
+ * per wheel by the instance matrix.
  */
 function tireGeometry(): THREE.BufferGeometry {
   const profile: THREE.Vector2[] = [
-    new THREE.Vector2(0.62, -0.5),
-    new THREE.Vector2(0.93, -0.5),
-    new THREE.Vector2(0.995, -0.34),
-    new THREE.Vector2(0.995, 0.34),
-    new THREE.Vector2(0.93, 0.5),
-    new THREE.Vector2(0.62, 0.5),
+    new THREE.Vector2(0.76, -0.5),
+    new THREE.Vector2(0.94, -0.5),
+    new THREE.Vector2(0.995, -0.33),
+    new THREE.Vector2(0.995, 0.33),
+    new THREE.Vector2(0.94, 0.5),
+    new THREE.Vector2(0.76, 0.5),
   ];
-  const geo = new THREE.LatheGeometry(profile, 16);
+  const geo = new THREE.LatheGeometry(profile, 20);
   geo.rotateZ(Math.PI / 2);
   return geo;
 }
@@ -511,23 +514,23 @@ function tireGeometry(): THREE.BufferGeometry {
 function rimGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  const lip = new THREE.TorusGeometry(0.615, 0.05, 4, 16);
+  const lip = new THREE.TorusGeometry(0.755, 0.045, 4, 20);
   lip.rotateY(Math.PI / 2);
   lip.translate(0.3, 0, 0);
   parts.push(lip);
 
-  const barrel = new THREE.CylinderGeometry(0.61, 0.58, 0.88, 16, 1, true);
+  const barrel = new THREE.CylinderGeometry(0.75, 0.71, 0.88, 20, 1, true);
   barrel.rotateZ(Math.PI / 2);
   barrel.translate(-0.04, 0, 0);
   parts.push(barrel);
 
-  const hub = new THREE.CylinderGeometry(0.2, 0.16, 0.14, 10);
+  const hub = new THREE.CylinderGeometry(0.21, 0.17, 0.14, 10);
   hub.rotateZ(Math.PI / 2);
   hub.translate(0.26, 0, 0);
   parts.push(hub);
 
   // Solid disc across the back of the barrel: without it the road shows through the wheel.
-  const dish = new THREE.CylinderGeometry(0.59, 0.59, 0.03, 16);
+  const dish = new THREE.CylinderGeometry(0.72, 0.72, 0.03, 20);
   dish.rotateZ(Math.PI / 2);
   dish.translate(-0.4, 0, 0);
   parts.push(dish);
@@ -535,13 +538,13 @@ function rimGeometry(): THREE.BufferGeometry {
   const spokes = 5;
   for (let i = 0; i < spokes; i++) {
     // Spokes stay in the wheel plane: extend along Y, then rotate about the axle.
-    const spoke = taperedBox(0.14, 0.09, 0.5, 0.22, 0.1);
-    spoke.translate(0, 0.35, 0);
+    const spoke = taperedBox(0.15, 0.1, 0.62, 0.22, 0.1);
+    spoke.translate(0, 0.42, 0);
     spoke.rotateX((i / spokes) * Math.PI * 2);
     spoke.translate(0.22, 0, 0);
     parts.push(spoke);
-    const split = taperedBox(0.1, 0.06, 0.44, 0.12, 0.06);
-    split.translate(0, 0.38, 0);
+    const split = taperedBox(0.11, 0.06, 0.56, 0.12, 0.06);
+    split.translate(0, 0.44, 0);
     split.rotateX(((i + 0.5) / spokes) * Math.PI * 2);
     split.translate(0.18, 0, 0);
     parts.push(split);
@@ -556,7 +559,7 @@ function rimGeometry(): THREE.BufferGeometry {
 function brakeGeometry(): THREE.BufferGeometry {
   const caliper = roundedBox(0.14, 0.38, 0.18, 0.04);
   caliper.rotateY(Math.PI / 2);
-  caliper.translate(0.0, 0.44, -0.12);
+  caliper.translate(0.0, 0.54, -0.12);
   return caliper;
 }
 

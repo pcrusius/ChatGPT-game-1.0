@@ -143,22 +143,28 @@ async function dip(direction) {
  * Drives the run forward without drawing until the odometer reaches `metres`. Themes are keyed
  * to distance, so this is how a section can start just before a cross-fade: forcing the theme
  * instead would snap the whole world over in one frame and misrepresent the game.
+ *
+ * A crash restarts the run, which puts the odometer back to zero, so the same autopilot that
+ * flies the recorded sections is used here — a weaker one never gets past the first kilometre.
  */
-async function driveTo(metres) {
-  await page.evaluate((target) => {
-    const g = window.__APEX__.game;
-    if (g.state !== "playing") window.__APEX__.startRun();
-    for (let i = 0; i < 20000 && g.distance < target; i++) {
-      const solid = g.field.entities.filter(
-        (e) => e.active && e.role !== "coin" && !e.jumpable && e.z > -52 && e.z < -4,
-      );
-      const lane = Math.round(g.lanePosition / 3.6);
-      const threat = solid.find((e) => Math.round((e.x + e.laneDrift) / 3.6) === lane);
-      if (threat) g.input(lane > -1 ? "left" : "right");
-      g.simulate(1 / 60);
+async function driveTo(metres, drive = AUTOPILOT) {
+  const reached = await page.evaluate(
+    (target, code) => {
+      const g = window.__APEX__.game;
+      const pilot = eval(code);
       if (g.state !== "playing") window.__APEX__.startRun();
-    }
-  }, metres);
+      for (let i = 0; i < 120000 && g.distance < target; i++) {
+        pilot(g, i);
+        g.simulate(1 / 60);
+        if (g.state !== "playing") window.__APEX__.startRun();
+      }
+      return Math.round(g.distance);
+    },
+    metres,
+    drive,
+  );
+  console.log(`drove to ${reached} m (wanted ${metres})`);
+  if (reached < metres - 5) throw new Error(`autopilot stalled at ${reached} m of ${metres} m`);
 }
 
 // --- Menu, garage, skin change.
