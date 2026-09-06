@@ -1,10 +1,11 @@
 // Fast iteration helper: garage close-ups of the player car from a few angles.
-//   node tools/car.mjs <url> <outDir>
+//   node tools/car.mjs <url> <outDir> [skinIndex]
 import puppeteer from "puppeteer-core";
 import { mkdirSync } from "node:fs";
 
 const url = process.argv[2] ?? "http://localhost:4173/";
 const outDir = process.argv[3] ?? "/tmp/car";
+const skinIndex = Number(process.argv[4] ?? 0);
 mkdirSync(outDir, { recursive: true });
 
 const browser = await puppeteer.launch({
@@ -42,13 +43,16 @@ await page.reload({ waitUntil: "networkidle0" });
 await new Promise((r) => setTimeout(r, 1800));
 
 // Park the car and drive the camera by hand so each angle is reproducible.
-await page.evaluate(() => {
+await page.evaluate((skin) => {
   const api = window.__APEX__;
-  api.game.showGarage();
+  // Through the UI, so the skin swatches exist and a chosen skin is applied for real.
+  api.openGarage();
+  const swatches = document.querySelectorAll("#skin-swatches .swatch");
+  if (skin > 0) swatches[skin].click();
   api.game.forceTheme("coastal");
   document.querySelectorAll(".screen").forEach((s) => s.classList.add("hidden"));
   document.getElementById("hud").classList.add("hidden");
-});
+}, skinIndex);
 await new Promise((r) => setTimeout(r, 1200));
 
 const angles = [
