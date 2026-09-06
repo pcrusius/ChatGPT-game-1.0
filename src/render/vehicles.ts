@@ -120,7 +120,9 @@ function buildSupercar(): VehicleModel {
 
   // Side sills and intake blades.
   b.pair("carbon", () => roundedBox(0.1, 0.13, 1.9, 0.04), 0.86, 0.235, 0.16);
-  b.pair("trim", () => taperedBox(0.1, 0.08, 0.3, 0.34, 0.22), 0.92, 0.5, 0.86);
+  // Sunk into the flank rather than stood on it, so the intake reads as a slot in the bodywork
+  // instead of a black block bolted to the side.
+  b.pair("trim", () => taperedBox(0.12, 0.08, 0.3, 0.36, 0.2), 0.84, 0.5, 0.86);
 
   // Mirrors on slim stalks, set low and outboard like a modern exotic.
   b.pair("trim", () => tubeX(0.024, 0.14), 0.94, 0.76, -0.72);
@@ -133,10 +135,11 @@ function buildSupercar(): VehicleModel {
     });
   }
 
-  // Rear wing on swan-neck stays.
+  // Rear wing on swan-neck stays. The endplates share the wing's angle of attack and only just
+  // stand proud of it: left square and twice as tall they read as two black ears above the car.
   b.pair("carbon", () => taperedBox(0.06, 0.05, 0.26, 0.13, 0.1), 0.5, 1.0, 1.88);
   b.at("carbon", taperedBox(1.42, 1.34, 0.055, 0.44, 0.36, -0.05), 0, 1.13, 1.88, { x: -0.1 });
-  b.pair("carbon", () => taperedBox(0.045, 0.045, 0.2, 0.4, 0.26), 0.71, 1.16, 1.9);
+  b.pair("carbon", () => taperedBox(0.04, 0.04, 0.11, 0.42, 0.3), 0.72, 1.135, 1.885, { x: -0.1 });
 
   // Rear fascia: slim light blade across painted bodywork, outer clusters, low dark vent.
   b.at("chrome", roundedBox(1.02, 0.018, 0.05, 0.008), 0, 0.815, 2.245);
