@@ -315,6 +315,7 @@ const overCoins = el("over-coins");
 const overTotal = el("over-total");
 const overDistance = el("over-distance");
 const overNear = el("over-near");
+const overJumps = el("over-jumps");
 const overRecord = el("over-record");
 const overMissions = el("over-missions");
 
@@ -333,6 +334,7 @@ game.hooks.onCrash = (result: RunResult) => {
   overTotal.textContent = String(save.coins);
   overDistance.textContent = `${result.distance.toLocaleString()} m`;
   overNear.textContent = String(result.nearMisses);
+  overJumps.textContent = String(result.jumps);
   overRecord.classList.toggle("hidden", !record);
 
   if (completed.length > 0) {
