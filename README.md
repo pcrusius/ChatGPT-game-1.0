@@ -98,7 +98,7 @@ The game targets 60 FPS on integrated graphics, and the shape of the frame is wh
 there rather than any single trick:
 
 - **One draw call per material role, not per object.** Traffic, obstacles, coins, scenery and
-  every wheel in the scene are instanced. A busy frame is about 75 draw calls and 32 k triangles.
+  every wheel in the scene are instanced. A busy frame is about 75 draw calls and 34 k triangles.
 - **Fixed pools, no allocation in the loop.** Entities, particles, wheels and ground shadows are
   preallocated; the update path allocates nothing, so there is no steady-state GC.
 - **Shared materials and textures.** Nothing in the loop clones a material, so the program count

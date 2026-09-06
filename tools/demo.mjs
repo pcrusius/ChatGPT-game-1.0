@@ -76,34 +76,63 @@ await page.evaluate((dt) => {
   };
 }, DT);
 
-// Autopilot: hold the emptiest lane, jump what can be jumped, and take coin lines when free.
+// Autopilot: hold the lane with the most clear road, jump what can be jumped, and take coin
+// lines when there is room to spare.
+//
+// It scores lanes instead of reacting to the obstacle in front, because reacting is what
+// strands it. Traffic closes gently — a car doing 60 in front of a car doing 80 takes seconds
+// to arrive — so a pilot that only moves once something is close ends up committed to a lane
+// with a car in it and a barricade in the only lane it can reach. Scoring makes it leave a
+// filling lane while both neighbours are still open.
 const AUTOPILOT = `(g, i) => {
   if (g.state !== "playing") return;
-  const solid = g.field.entities.filter((e) => e.active && e.role !== "coin" && !e.jumpable && e.z > -52 && e.z < -4);
-  const jumpable = g.field.entities.filter((e) => e.active && e.jumpable && e.role === "obstacle" && e.z > -30 && e.z < -4);
   const lane = Math.round(g.lanePosition / 3.6);
-  const inLane = (e) => Math.round((e.x + e.laneDrift) / 3.6) === lane;
-  const hop = jumpable.find((e) => inLane(e) && e.z > -18);
+  const laneOf = (e) => Math.round((e.x + e.laneDrift) / 3.6);
+  const horizon = g.speed * 2.2 + 40;
+  const live = g.field.entities.filter(
+    (e) => e.active && e.role !== "coin" && e.z > -horizon && e.z < 8,
+  );
+  const hop = live.find(
+    (e) => e.jumpable && laneOf(e) === lane && e.z > -(g.speed * 0.32 + 6) && e.z < -4,
+  );
   if (hop) { g.input("jump"); return; }
-  const threat = solid.find(inLane);
-  if (threat) {
-    const blocked = new Set([...solid, ...jumpable].map((e) => Math.round((e.x + e.laneDrift) / 3.6)));
-    for (const next of [lane - 1, lane + 1, lane - 1]) {
-      if (next < -1 || next > 1 || blocked.has(next)) continue;
-      g.input(next < lane ? "left" : "right");
-      return;
+  // One lane change at a time, or a two-frame reaction turns into a two-lane slide.
+  if (g.player.laneT < 1) return;
+
+  // Clear road ahead per lane. A jumpable is a cost, not a wall: it can be cleared.
+  const gap = [horizon, horizon, horizon];
+  for (const e of live) {
+    if (e.z > -4) continue;
+    const l = laneOf(e) + 1;
+    if (l < 0 || l > 2) continue;
+    const cost = e.jumpable ? -e.z + 60 : -e.z;
+    if (cost < gap[l]) gap[l] = cost;
+  }
+  // A lane can only be taken if it is empty alongside the car right now.
+  const enterable = (l) =>
+    l >= -1 && l <= 1 && !live.some((e) => laneOf(e) === l && e.z > -26 && e.z < 10);
+
+  if (gap[lane + 1] > g.speed * 1.9) {
+    // Room to spare: spend the frames lining up on a coin run.
+    if (i % 10 !== 0) return;
+    const coin = g.field.entities.find((e) => e.active && e.role === "coin" && e.z > -90 && e.z < -30);
+    if (!coin) return;
+    const want = Math.round(coin.x / 3.6);
+    if (want === lane) return;
+    const step = want < lane ? lane - 1 : lane + 1;
+    if (enterable(step) && gap[step + 1] > g.speed * 1.6) {
+      g.input(step < lane ? "left" : "right");
     }
     return;
   }
-  // Nothing in the way: drift toward the nearest coin line.
-  if (i % 12 !== 0) return;
-  const coin = g.field.entities.find((e) => e.active && e.role === "coin" && e.z > -70 && e.z < -20);
-  if (!coin) return;
-  const target = Math.round(coin.x / 3.6);
-  if (target === lane) return;
-  const blocked = new Set([...solid, ...jumpable].map((e) => Math.round((e.x + e.laneDrift) / 3.6)));
-  const step = target < lane ? lane - 1 : lane + 1;
-  if (!blocked.has(step)) g.input(step < lane ? "left" : "right");
+
+  let pick = null;
+  for (const next of [lane - 1, lane + 1]) {
+    if (!enterable(next)) continue;
+    if (gap[next + 1] < gap[lane + 1] + 8) continue;
+    if (pick === null || gap[next + 1] > gap[pick + 1]) pick = next;
+  }
+  if (pick !== null) g.input(pick < lane ? "left" : "right");
 }`;
 
 let frame = 0;
@@ -126,6 +155,15 @@ async function record(seconds, drive = null, label = "") {
     await shoot();
   }
   if (label) console.log(`${label}: ${frames} frames (total ${frame})`);
+  return page.evaluate(() => window.__APEX__.game.state);
+}
+
+/** Throws away every frame captured since `mark`, so a take can be redone. */
+function discardFrom(mark) {
+  for (let f = mark; f < frame; f++) {
+    rmSync(`${frameDir}/${String(f).padStart(5, "0")}.jpg`, { force: true });
+  }
+  frame = mark;
 }
 
 /** Dips to black and back, so a jump to a different part of the road reads as a cut. */
@@ -177,21 +215,27 @@ await record(1.5, null, "garage midnight");
 await page.evaluate(() => document.querySelectorAll("#skin-swatches .swatch")[0].click());
 await record(0.9, null, "garage crimson");
 
-// --- Each leg starts just short of a theme boundary, so the 260 m cross-fade plays on camera.
-await dip("out");
-await driveTo(1150);
-await dip("in");
-await record(6.5, AUTOPILOT, "coast into desert");
+/**
+ * Records one leg starting just short of a theme boundary, so the 260 m cross-fade plays out on
+ * camera. A crash part-way through leaves the game over card sitting in the middle of the leg,
+ * which is not what the leg is there to show, so the take is thrown away and driven again.
+ */
+async function takeLeg(metres, seconds, label) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const mark = frame;
+    await dip("out");
+    await driveTo(metres);
+    await dip("in");
+    if ((await record(seconds, AUTOPILOT, label)) === "playing") return;
+    discardFrom(mark);
+    console.log(`${label}: crashed mid-take, retaking (attempt ${attempt})`);
+  }
+  throw new Error(`${label}: no clean take in five attempts`);
+}
 
-await dip("out");
-await driveTo(2650);
-await dip("in");
-await record(6.5, AUTOPILOT, "desert into night");
-
-await dip("out");
-await driveTo(4100);
-await dip("in");
-await record(6.0, AUTOPILOT, "night into dawn");
+await takeLeg(1150, 6.5, "coast into desert");
+await takeLeg(2650, 6.5, "desert into night");
+await takeLeg(4100, 6.0, "night into dawn");
 
 // --- Crash and the game over screen.
 await record(2.6, `(g) => {
