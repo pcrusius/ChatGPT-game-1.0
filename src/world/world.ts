@@ -313,11 +313,13 @@ export class World {
    * Call after `update`, which restores the themed sun each frame.
    */
   lightShowcase(camera: THREE.Vector3, carX: number): void {
-    this.sun.position.set(carX + camera.x * 1.6, 22, camera.z * 1.6 + 6);
+    // Kept low and to the camera's side: a high key light only reaches the horizontal panels,
+    // and the flanks — which is most of what a car shows — stay dark.
+    this.sun.position.set(carX + camera.x * 1.7, 9, camera.z * 1.7 + 5);
     this.sun.target.position.set(carX, 0.5, 0);
-    this.sun.intensity = 3.1;
-    this.fill.position.set(carX - camera.x * 0.8, 9, -camera.z * 0.8);
-    this.fill.intensity = 1.1;
+    this.sun.intensity = 3.4;
+    this.fill.position.set(carX - camera.x * 0.9, 6, -camera.z * 0.9);
+    this.fill.intensity = 1.3;
   }
 
   dispose(): void {
