@@ -20,6 +20,20 @@ npm run build     # type-checks with tsc --noEmit, then bundles
 npm run preview   # serves the production build on :4173
 ```
 
+## Hosting it
+
+The build in `dist/` is a static site with no backend and no asset files — every mesh, texture
+and sound is generated in code at startup — so it can be dropped on any static host.
+
+`.github/workflows/pages.yml` builds and publishes to GitHub Pages on every push to `main`.
+It needs Pages switched on for the repository with **Source: GitHub Actions**, and Pages only
+covers private repositories on paid plans, so a private repo has to be made public first.
+
+Any other static host works with zero configuration: point it at this repository, build command
+`npm run build`, output directory `dist`. A host that serves the site from a subdirectory rather
+than a domain root needs the bundle linked from that prefix, which the `PUBLIC_BASE` environment
+variable sets at build time (`PUBLIC_BASE=/my-repo/ npm run build`).
+
 ## Controls
 
 | Key | Action |
