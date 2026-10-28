@@ -34,8 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # A project site lives under /<repo>/, so the bundle is linked from there.
       - name: Build
         run: npm run build
+        env:
+          PUBLIC_BASE: /${{ github.event.repository.name }}/
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
