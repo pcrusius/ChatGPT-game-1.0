@@ -43,6 +43,11 @@ export class Player {
   private crashSpin = 0;
   private crashTilt = 0;
   private crashVel = 0;
+  /** Crash recoil, as a visual offset only: the car bounces off what it hit. */
+  private crashPush = 0;
+  private crashPushVel = 0;
+  private crashSlide = 0;
+  private crashSlideVel = 0;
   private engineShake = 0;
 
   private readonly materials: Materials;
@@ -105,6 +110,10 @@ export class Player {
     this.crashSpin = 0;
     this.crashTilt = 0;
     this.crashVel = 0;
+    this.crashPush = 0;
+    this.crashPushVel = 0;
+    this.crashSlide = 0;
+    this.crashSlideVel = 0;
     this.group.position.set(this.x, 0, 0);
     this.group.rotation.set(0, 0, 0);
     this.group.visible = true;
@@ -139,10 +148,23 @@ export class Player {
     this.emit("jump");
   }
 
+  /**
+   * `impactX` is where the struck object sits relative to the car, so a glancing hit on one
+   * flank throws the car the other way.
+   *
+   * The world stops scrolling the instant the car crashes, which leaves the car spinning inside
+   * whatever it hit. The recoil shoves it back out of the wreck: the offset is cosmetic, applied
+   * to the mesh rather than to `x`, so collision and the camera target stay where they were.
+   */
   crash(impactX: number): void {
     if (this.crashed) return;
     this.crashed = true;
     this.crashVel = THREE.MathUtils.clamp(-impactX * 2.4, -6, 6) + (Math.random() - 0.5) * 2;
+    this.crashPushVel = 7.5;
+    // A square hit on the nose has no side to pick, so bias it off centre to keep the tumble
+    // from looking like a rail slide.
+    const glance = Math.abs(impactX) < 0.4 ? (Math.random() - 0.5) * 0.8 : -impactX;
+    this.crashSlideVel = THREE.MathUtils.clamp(glance * 3.2, -5, 5);
     this.suspensionVel = -6;
     if (!this.airborne) this.vy = 2.2;
     this.airborne = true;
@@ -151,6 +173,19 @@ export class Player {
   /** Vertical offset applied to the wheels, i.e. suspension travel. */
   get suspensionTravel(): number {
     return this.suspension;
+  }
+
+  /**
+   * Where the car is actually drawn. During a crash this diverges from `x` by the recoil, and
+   * ground shadows have to follow the mesh or they detach and the wreck looks like it is
+   * hovering over its own shadow.
+   */
+  get renderX(): number {
+    return this.x + this.crashSlide;
+  }
+
+  get renderZ(): number {
+    return this.crashPush;
   }
 
   update(dt: number, speed: number, wheels: WheelSystem): void {
@@ -196,13 +231,21 @@ export class Player {
       this.crashSpin += this.crashVel * dt;
       this.crashVel *= 1 - Math.min(dt * 1.4, 0.6);
       this.crashTilt += (0.22 - this.crashTilt) * Math.min(1, dt * 2.2);
+      this.crashPush += this.crashPushVel * dt;
+      this.crashPushVel *= 1 - Math.min(dt * 2.6, 0.8);
+      this.crashSlide += this.crashSlideVel * dt;
+      this.crashSlideVel *= 1 - Math.min(dt * 2.2, 0.8);
     }
 
     // Idle engine vibration: tiny, but the car never looks frozen.
     this.engineShake += dt * 42;
     const idle = this.crashed ? 0 : Math.sin(this.engineShake) * 0.0016;
 
-    this.group.position.set(this.x, this.y + this.suspension * 0.55, 0);
+    this.group.position.set(
+      this.x + this.crashSlide,
+      this.y + this.suspension * 0.55,
+      this.crashPush,
+    );
     this.group.rotation.set(
       this.bodyPitch + idle,
       this.crashSpin,

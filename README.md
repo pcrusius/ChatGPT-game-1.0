@@ -60,6 +60,15 @@ Hazards come in three kinds:
 - **Barriers**, **hurdles** and **roadblocks** are low enough to jump, and usually have a coin
   arc over them for players who commit.
 
+### Crashing
+
+A crash does not stop the world dead. Scored distance freezes at the point of impact, but the
+car keeps its momentum: it recoils roughly 3 m out of the wreck, the struck object is knocked
+askew and left behind, and the whole scene decelerates to rest over about 6.7 m and 0.9 s. The
+camera's speed term is held at its value on impact, because letting it fall narrows the field of
+view, and a narrowing field of view magnifies the scene — the wreck stands still while the view
+still reads as driving forward. The game-over card is held back 900 ms so the impact plays out.
+
 ### Never an unwinnable road
 
 Patterns are emitted one at a time with a gap sized from the current speed, and each one leaves
@@ -162,6 +171,8 @@ All of these drive a real Chrome against the production build (`npm run preview`
 | `node tools/shots.mjs <url> <dir>` | Screenshots of every screen and every theme |
 | `node tools/car.mjs <url> <dir>` | Close-ups of the player car from five angles |
 | `node tools/demo.mjs <url> <file>` | Deterministic gameplay video, rendered frame by frame |
+| `node tools/crash.mjs <url> <file> [--flat]` | Drives into the first unavoidable hazard and films the impact; `--flat` pins the car and freezes the world for an A/B against the old crash |
+| `node tools/smoke.mjs <url> [dir]` | Loads a deployed URL, plays a run, and reports boot time, page errors and failed requests. Catches a bundle linked from the wrong base path, which only breaks when the site is not served from the root |
 
 The box these were written on has no GPU, so the spec steps the simulation directly instead of
 rendering, and `profile` reports hardware-independent numbers (JS time per frame and WebGL calls

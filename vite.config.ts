@@ -1,8 +1,10 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  // GitHub Pages project site: https://<user>.github.io/ChatGPT-game-1.0/
-  base: "/ChatGPT-game-1.0/",
+  // A GitHub Pages project site serves from /<repo>/, so the bundle has to be linked from that
+  // prefix; anywhere else serves from the domain root. The deploy workflow sets PUBLIC_BASE, and
+  // the default keeps `npm run dev` and `npm run preview` at the root.
+  base: process.env.PUBLIC_BASE ?? "/",
   server: {
     host: true,
     port: 5173,
