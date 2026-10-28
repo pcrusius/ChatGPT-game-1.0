@@ -17,7 +17,7 @@ import { Sky } from "../world/sky";
 import { THEMES, THEME_ORDER, blendThemes, makeBlend, type ThemeId } from "../world/themes";
 import { CameraRig } from "./camera";
 import { Director } from "./director";
-import { EntityField } from "./entities";
+import { EntityField, type Entity } from "./entities";
 import { GroundShadows, Particles } from "./effects";
 import { Player } from "./player";
 import { AudioEngine } from "./audio";
@@ -183,6 +183,8 @@ export class Game {
   private lateralVelocity = 0;
   private running = false;
   private crashTimer = 0;
+  /** Distance the world has scrolled, which keeps advancing while a crash rolls to a stop. */
+  private rollout = 0;
   private selectedSkin: SkinId = "red";
   private dustTimer = 0;
 
@@ -362,6 +364,7 @@ export class Game {
     this.score = 0;
     this.coins = 0;
     this.distance = 0;
+    this.rollout = 0;
     this.speed = START_SPEED;
     this.multiplier = 1;
     this.coinStreak = 0;
@@ -465,11 +468,18 @@ export class Game {
       this.speed = START_SPEED + (MAX_SPEED - START_SPEED) * ramp;
       this.topSpeed = Math.max(this.topSpeed, this.speed);
     } else {
-      this.speed *= 1 - Math.min(dt * 1.8, 0.9);
+      // Hard deceleration: a crash should come to rest in about a car length and a half. The
+      // gentler decay this replaced carried the car some twenty metres past whatever it hit,
+      // which read as driving through the obstacle rather than into it.
+      this.speed *= 1 - Math.min(dt * 6.5, 0.92);
     }
 
     const scroll = this.speed * dt;
+    // Scored distance stops at the crash, but the world keeps rolling on the decaying speed
+    // until it stops. Freezing every road chunk, prop and car at the instant of impact is what
+    // made crashes read as a glitch rather than a collision.
     if (playing) this.distance += scroll;
+    this.rollout += scroll;
 
     this.lateralVelocity = (this.player.x - this.previousX) / Math.max(dt, 1e-4);
     this.previousX = this.player.x;
@@ -483,10 +493,16 @@ export class Game {
     this.player.setShadow(this.quality.shadows && !this.player.airborne);
     // Player contact shadow shrinks and fades while airborne.
     const lift = THREE.MathUtils.clamp(this.player.y / 2.5, 0, 1);
-    this.shadows.push(this.player.x, 0, 3.2 * (1 - lift * 0.45), 6.0 * (1 - lift * 0.4), 1);
+    this.shadows.push(
+      this.player.renderX,
+      this.player.renderZ,
+      3.2 * (1 - lift * 0.45),
+      6.0 * (1 - lift * 0.4),
+      1,
+    );
 
     if (playing) this.director.update(scroll, this.distance, this.speed, this.field);
-    this.field.update(dt, playing ? scroll : 0, this.shadows);
+    this.field.update(dt, scroll, this.shadows);
 
     this.shadows.end();
     this.wheels.endFrame();
@@ -495,7 +511,7 @@ export class Game {
 
     this.emitDriveEffects(dt, playing);
     this.particles.update(dt);
-    this.world.update(this.distance, dt, this.rig.camera.position.z);
+    this.world.update(this.rollout, dt, this.rig.camera.position.z);
     this.applyEnvironment(this.world.dominantTheme);
     this.renderer.toneMappingExposure = this.world.theme.exposure;
     this.shadows.setOpacity(0.42 * (1 - this.world.theme.nightFactor * 0.55));
@@ -589,7 +605,7 @@ export class Game {
       if (xOverlap) {
         // Airborne above a low obstacle counts as cleared, not a hit.
         if (this.player.y > entity.height + 0.05) continue;
-        this.crash(ex);
+        this.crash(ex, entity);
         return;
       }
 
@@ -619,11 +635,22 @@ export class Game {
     this.hooks.onCoin?.(this.coinStreak, this.multiplier);
   }
 
-  private crash(impactX: number): void {
+  private crash(impactX: number, hit?: Entity): void {
     this.setState("crashed");
     this.player.crash(impactX - this.player.x);
-    this.particles.burst("crash", this.player.x, 0.9, 0, 1);
-    this.particles.burst("spark", this.player.x, 0.6, -1.4, 1.4);
+    // Debris belongs where the two bodies touched, not at the middle of the car. The contact
+    // sits between the car's nose and the struck object's trailing face.
+    const contactZ = hit ? Math.min(0, (hit.z + hit.halfLength - PLAYER_HALF_LENGTH) * 0.5) : -1;
+    const contactX = hit ? (impactX + this.player.x) * 0.5 : this.player.x;
+    this.particles.burst("crash", contactX, 0.9, contactZ, 1);
+    this.particles.burst("spark", contactX, 0.6, contactZ - 0.4, 1.4);
+    // Knock the struck object askew. Without this it slides away at exactly the angle it was
+    // placed at, which makes a barrier taken at 180 kph look painted onto the road.
+    if (hit) {
+      const offset = impactX - this.player.x;
+      const side = Math.abs(offset) < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(offset);
+      hit.yawVel = side * (1.4 + Math.random() * 1.1);
+    }
     this.rig.kick(1.5, 2.4);
     this.audio.crash();
     this.coinStreak = 0;

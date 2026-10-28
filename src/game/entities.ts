@@ -7,6 +7,7 @@ import type { GroundShadows } from "./effects";
 
 const POS = new THREE.Vector3();
 const QUAT = new THREE.Quaternion();
+const YAW_AXIS = new THREE.Vector3(0, 1, 0);
 const SCALE = new THREE.Vector3();
 const MAT = new THREE.Matrix4();
 const EULER = new THREE.Euler();
@@ -111,6 +112,9 @@ export interface Entity {
   shadowWidth: number;
   laneDrift: number;
   driftTarget: number;
+  /** Yaw, non-zero only for something the player has just hit. */
+  yaw: number;
+  yawVel: number;
 }
 
 interface ObstacleSpec {
@@ -206,6 +210,8 @@ export class EntityField {
         shadowWidth: 2,
         laneDrift: 0,
         driftTarget: 0,
+        yaw: 0,
+        yawVel: 0,
       });
     }
 
@@ -497,7 +503,13 @@ export class EntityField {
 
   private acquire(): Entity | null {
     for (const entity of this.entities) {
-      if (!entity.active) return entity;
+      if (!entity.active) {
+        // Cleared centrally: a knocked-aside wreck must not come back out of the pool still
+        // sitting at the angle it was left at.
+        entity.yaw = 0;
+        entity.yawVel = 0;
+        return entity;
+      }
     }
     return null;
   }
@@ -660,8 +672,13 @@ export class EntityField {
         continue;
       }
 
+      if (entity.yawVel !== 0) {
+        entity.yaw += entity.yawVel * dt;
+        entity.yawVel *= 1 - Math.min(dt * 1.6, 0.6);
+      }
+
       TINT.setHex(entity.color, THREE.SRGBColorSpace);
-      set.push(x, entity.y, entity.z, 0, 1, TINT);
+      set.push(x, entity.y, entity.z, entity.yaw, 1, TINT);
 
       if (entity.shadowWidth > 0) {
         shadows.push(x, entity.z, entity.shadowWidth, entity.halfLength * 2.6);
@@ -671,7 +688,10 @@ export class EntityField {
         const model = vehicleModels().get(entity.wheelKind)!;
         entity.spin += (entity.speed / 0.4) * dt;
         POS.set(x, 0, entity.z);
-        QUAT.identity();
+        // Wheels are placed independently of the body, so a knocked vehicle has to carry its
+        // yaw here too or the body swings away and leaves its wheels pointing down the road.
+        if (entity.yaw !== 0) QUAT.setFromAxisAngle(YAW_AXIS, entity.yaw);
+        else QUAT.identity();
         const detailed = entity.z > RIM_LOD_Z;
         for (const spec of model.wheels) {
           this.wheels.push(spec, POS, QUAT, entity.spin, 0, WHEEL_GREY, null, detailed);

@@ -33,6 +33,8 @@ export class CameraRig {
   private roll = 0;
   private fov = 62;
   private garageAngle = 0;
+  /** Speed term held at its value on impact; negative means no crash in progress. */
+  private crashSpeedT = -1;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(62, aspect, 0.4, 2600);
@@ -59,6 +61,7 @@ export class CameraRig {
     this.shake = 0;
     this.impulse = 0;
     this.roll = 0;
+    this.crashSpeedT = -1;
   }
 
   kick(strength: number, decay = 3): void {
@@ -110,11 +113,21 @@ export class CameraRig {
       return;
     }
 
-    const speedT = THREE.MathUtils.clamp(
+    const rawSpeedT = THREE.MathUtils.clamp(
       (speed - START_SPEED) / (MAX_SPEED - START_SPEED),
       0,
       1,
     );
+    // The speed term drives FOV and the camera's ride height. Letting it fall with the car's
+    // speed during a crash narrows the FOV, and a narrowing FOV magnifies the scene: the world
+    // has stopped but the view still reads as driving forward. Holding the impact value keeps
+    // the wreck still.
+    if (crashed) {
+      if (this.crashSpeedT < 0) this.crashSpeedT = rawSpeedT;
+    } else {
+      this.crashSpeedT = -1;
+    }
+    const speedT = crashed ? this.crashSpeedT : rawSpeedT;
 
     // Camera drops and pulls back a little as speed builds.
     this.targetPosition.set(
